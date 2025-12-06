@@ -209,7 +209,7 @@ export default function Orders() {
         .from('orders')
         .insert({
           restaurant_id: currentRestaurant.id,
-          table_id: selectedTableId || null,
+          table_id: selectedTableId && selectedTableId !== 'takeaway' ? selectedTableId : null,
           total_amount: cartTotal,
           notes: orderNotes || null,
           status: 'pending',
@@ -406,7 +406,7 @@ export default function Orders() {
                       <SelectValue placeholder="Takeaway / No Table" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Takeaway / No Table</SelectItem>
+                      <SelectItem value="takeaway">Takeaway / No Table</SelectItem>
                       {tables.map((table) => (
                         <SelectItem key={table.id} value={table.id}>
                           {table.table_number} ({table.floor.name})
