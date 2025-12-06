@@ -640,9 +640,11 @@ export default function OrderKiosk() {
     }
   };
 
+  // grandTotal is simply the cartTotal since the cart always reflects all items
+  // (both from active orders and newly added items)
   const grandTotal = useMemo(() => {
-    return (activeOrder?.total_amount || 0) + cartTotal;
-  }, [activeOrder?.total_amount, cartTotal]);
+    return cartTotal;
+  }, [cartTotal]);
 
   const processPayment = async (paymentMethod: 'cash' | 'card' | 'upi') => {
     if (!selectedTable || !activeOrder) return;
