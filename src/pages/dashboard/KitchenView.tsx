@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,8 @@ import {
   Timer,
   Bell,
   ArrowRight,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -51,10 +53,49 @@ const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string }> = {
   cancelled: { label: 'Cancelled', color: 'bg-destructive/10 text-destructive border-destructive/30' },
 };
 
+// Create notification sound using Web Audio API
+const createNotificationSound = (audioContext: AudioContext) => {
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+  
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+  
+  oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+  oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1);
+  oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.2);
+  
+  gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+  
+  oscillator.start(audioContext.currentTime);
+  oscillator.stop(audioContext.currentTime + 0.5);
+};
+
 export default function KitchenView() {
   const { currentRestaurant } = useRestaurant();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  const playNotificationSound = useCallback(() => {
+    if (!soundEnabled) return;
+    
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      
+      if (audioContextRef.current.state === 'suspended') {
+        audioContextRef.current.resume();
+      }
+      
+      createNotificationSound(audioContextRef.current);
+    } catch (error) {
+      console.error('Error playing notification sound:', error);
+    }
+  }, [soundEnabled]);
 
   const fetchOrders = async () => {
     if (!currentRestaurant) return;
@@ -103,6 +144,7 @@ export default function KitchenView() {
           fetchOrders();
           
           if (payload.eventType === 'INSERT') {
+            playNotificationSound();
             toast.info('New order received!', {
               icon: <Bell className="w-4 h-4" />,
             });
@@ -328,10 +370,23 @@ export default function KitchenView() {
           </h1>
           <p className="text-muted-foreground">Real-time order management for kitchen staff</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
+          <Button
+            variant={soundEnabled ? 'outline' : 'ghost'}
+            size="sm"
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            className={soundEnabled ? 'text-primary' : 'text-muted-foreground'}
+          >
+            {soundEnabled ? (
+              <Volume2 className="w-4 h-4 mr-2" />
+            ) : (
+              <VolumeX className="w-4 h-4 mr-2" />
+            )}
+            {soundEnabled ? 'Sound On' : 'Sound Off'}
+          </Button>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-            Live updates enabled
+            Live updates
           </div>
         </div>
       </div>
