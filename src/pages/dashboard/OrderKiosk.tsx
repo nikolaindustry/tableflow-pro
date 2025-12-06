@@ -471,38 +471,102 @@ export default function OrderKiosk() {
     
     setSubmitting(true);
     try {
-      // Create order
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert({
-          restaurant_id: currentRestaurant.id,
-          table_id: selectedTable.id,
-          total_amount: cartTotal,
-          status: 'pending'
-        })
-        .select()
-        .single();
+      if (activeOrder) {
+        // Update existing order
+        const existingItemIds = activeOrder.items.map(i => i.menu_item_id);
+        const cartItemIds = cart.map(i => i.menuItem.id);
+        
+        // Items to add (in cart but not in existing order)
+        const itemsToAdd = cart.filter(item => !existingItemIds.includes(item.menuItem.id));
+        
+        // Items to remove (in existing order but not in cart)
+        const itemsToRemove = activeOrder.items.filter(item => !cartItemIds.includes(item.menu_item_id));
+        
+        // Items to update quantity (in both, but quantity changed)
+        const itemsToUpdate = cart.filter(cartItem => {
+          const existingItem = activeOrder.items.find(i => i.menu_item_id === cartItem.menuItem.id);
+          return existingItem && existingItem.quantity !== cartItem.quantity;
+        });
 
-      if (orderError) throw orderError;
+        // Remove items
+        if (itemsToRemove.length > 0) {
+          const { error } = await supabase
+            .from('order_items')
+            .delete()
+            .in('id', itemsToRemove.map(i => i.id));
+          if (error) throw error;
+        }
 
-      // Create order items
-      const orderItems = cart.map(item => ({
-        order_id: order.id,
-        menu_item_id: item.menuItem.id,
-        kitchen_id: item.menuItem.kitchen_id,
-        quantity: item.quantity,
-        unit_price: item.menuItem.price,
-        notes: item.notes || null,
-        status: 'pending' as const
-      }));
+        // Add new items
+        if (itemsToAdd.length > 0) {
+          const newItems = itemsToAdd.map(item => ({
+            order_id: activeOrder.id,
+            menu_item_id: item.menuItem.id,
+            kitchen_id: item.menuItem.kitchen_id,
+            quantity: item.quantity,
+            unit_price: item.menuItem.price,
+            notes: item.notes || null,
+            status: 'pending' as const
+          }));
+          const { error } = await supabase.from('order_items').insert(newItems);
+          if (error) throw error;
+        }
 
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItems);
+        // Update quantities
+        for (const cartItem of itemsToUpdate) {
+          const existingItem = activeOrder.items.find(i => i.menu_item_id === cartItem.menuItem.id);
+          if (existingItem) {
+            const { error } = await supabase
+              .from('order_items')
+              .update({ quantity: cartItem.quantity, status: 'pending' })
+              .eq('id', existingItem.id);
+            if (error) throw error;
+          }
+        }
 
-      if (itemsError) throw itemsError;
+        // Update order total
+        const { error: orderError } = await supabase
+          .from('orders')
+          .update({ total_amount: cartTotal, status: 'pending' })
+          .eq('id', activeOrder.id);
+        if (orderError) throw orderError;
 
-      toast.success('Order sent to kitchen!');
+        toast.success('Order updated!');
+      } else {
+        // Create new order
+        const { data: order, error: orderError } = await supabase
+          .from('orders')
+          .insert({
+            restaurant_id: currentRestaurant.id,
+            table_id: selectedTable.id,
+            total_amount: cartTotal,
+            status: 'pending'
+          })
+          .select()
+          .single();
+
+        if (orderError) throw orderError;
+
+        // Create order items
+        const orderItems = cart.map(item => ({
+          order_id: order.id,
+          menu_item_id: item.menuItem.id,
+          kitchen_id: item.menuItem.kitchen_id,
+          quantity: item.quantity,
+          unit_price: item.menuItem.price,
+          notes: item.notes || null,
+          status: 'pending' as const
+        }));
+
+        const { error: itemsError } = await supabase
+          .from('order_items')
+          .insert(orderItems);
+
+        if (itemsError) throw itemsError;
+
+        toast.success('Order sent to kitchen!');
+      }
+      
       setCart([]);
       fetchActiveOrder(selectedTable.id);
     } catch (error: any) {
