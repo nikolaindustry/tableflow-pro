@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { 
   Users, 
@@ -24,7 +25,11 @@ import {
   Receipt,
   CheckCircle2,
   Clock,
-  ChefHat
+  ChefHat,
+  CreditCard,
+  Banknote,
+  Printer,
+  Wallet
 } from 'lucide-react';
 
 interface Table {
@@ -123,6 +128,8 @@ export default function OrderKiosk() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [submitting, setSubmitting] = useState(false);
+  const [showBillDialog, setShowBillDialog] = useState(false);
+  const [processingPayment, setProcessingPayment] = useState(false);
 
   const fetchData = async () => {
     if (!currentRestaurant) return;
@@ -450,6 +457,131 @@ export default function OrderKiosk() {
     }
   };
 
+  const grandTotal = useMemo(() => {
+    return (activeOrder?.total_amount || 0) + cartTotal;
+  }, [activeOrder?.total_amount, cartTotal]);
+
+  const processPayment = async (paymentMethod: 'cash' | 'card' | 'upi') => {
+    if (!selectedTable || !activeOrder) return;
+    
+    setProcessingPayment(true);
+    try {
+      // Mark all orders for this table as served
+      await supabase
+        .from('orders')
+        .update({ status: 'served' })
+        .eq('table_id', selectedTable.id)
+        .in('status', ['pending', 'cooking', 'ready']);
+
+      // Mark table as free
+      await supabase
+        .from('tables')
+        .update({ is_occupied: false })
+        .eq('id', selectedTable.id);
+
+      // Update local floors state
+      setFloors(floors.map(f => ({
+        ...f,
+        tables: f.tables.map(t => 
+          t.id === selectedTable.id ? { ...t, is_occupied: false } : t
+        )
+      })));
+
+      setShowBillDialog(false);
+      toast.success(`Payment received via ${paymentMethod.toUpperCase()}`);
+      handleCloseOrder();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to process payment');
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
+
+  const printBill = () => {
+    if (!selectedTable || !activeOrder || !currentRestaurant) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow popups to print the bill');
+      return;
+    }
+
+    const billDate = new Date().toLocaleString('en-IN', {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
+
+    const itemsHtml = activeOrder.items.map(item => `
+      <tr>
+        <td style="padding: 6px 0;">${item.menu_item?.name || 'Item'}</td>
+        <td style="text-align: center;">${item.quantity}</td>
+        <td style="text-align: right;">₹${item.unit_price.toFixed(2)}</td>
+        <td style="text-align: right;">₹${(item.unit_price * item.quantity).toFixed(2)}</td>
+      </tr>
+    `).join('');
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Bill - ${currentRestaurant.name}</title>
+          <style>
+            body { font-family: 'Courier New', monospace; font-size: 12px; padding: 20px; max-width: 300px; margin: 0 auto; }
+            .header { text-align: center; margin-bottom: 20px; }
+            .header h1 { font-size: 18px; margin: 0 0 5px 0; }
+            .header p { margin: 2px 0; color: #666; font-size: 11px; }
+            table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+            th { border-bottom: 1px dashed #000; padding: 6px 0; text-align: left; font-size: 11px; }
+            th:nth-child(2), th:nth-child(3), th:nth-child(4) { text-align: right; }
+            .total-row { border-top: 1px dashed #000; font-weight: bold; }
+            .total-row td { padding-top: 10px; }
+            .footer { text-align: center; margin-top: 30px; font-size: 11px; }
+            .divider { border-bottom: 1px dashed #000; margin: 15px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>${currentRestaurant.name}</h1>
+            ${currentRestaurant.address ? `<p>${currentRestaurant.address}</p>` : ''}
+            ${currentRestaurant.phone ? `<p>Phone: ${currentRestaurant.phone}</p>` : ''}
+            ${currentRestaurant.gstin ? `<p>GSTIN: ${currentRestaurant.gstin}</p>` : ''}
+          </div>
+          <div class="divider"></div>
+          <p><strong>Table:</strong> ${selectedTable.table_number}</p>
+          <p><strong>Date:</strong> ${billDate}</p>
+          <div class="divider"></div>
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Price</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+          <div class="divider"></div>
+          <table>
+            <tr class="total-row">
+              <td colspan="3"><strong>Grand Total</strong></td>
+              <td style="text-align: right;"><strong>₹${activeOrder.total_amount.toFixed(2)}</strong></td>
+            </tr>
+          </table>
+          <div class="footer">
+            <p>Thank you for dining with us!</p>
+            <p>Please visit again</p>
+          </div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.print();
+  };
+
   if (!currentRestaurant) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background text-center p-4">
@@ -759,6 +891,16 @@ export default function OrderKiosk() {
                   </Button>
                 </>
               )}
+              {activeOrder && activeOrder.items.length > 0 && (
+                <Button 
+                  className="w-full bg-success hover:bg-success/90"
+                  size="lg"
+                  onClick={() => setShowBillDialog(true)}
+                >
+                  <CreditCard className="w-4 h-4 mr-2" />
+                  Generate Bill (₹{grandTotal})
+                </Button>
+              )}
               <Button 
                 variant="outline" 
                 className="w-full"
@@ -767,6 +909,85 @@ export default function OrderKiosk() {
                 Mark Table Available
               </Button>
             </div>
+
+            {/* Billing Dialog */}
+            <Dialog open={showBillDialog} onOpenChange={setShowBillDialog}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Receipt className="w-5 h-5" />
+                    Bill for Table {selectedTable?.table_number}
+                  </DialogTitle>
+                </DialogHeader>
+                
+                <div className="space-y-4">
+                  {/* Bill Summary */}
+                  <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                    {activeOrder?.items.map((item) => (
+                      <div key={item.id} className="flex justify-between text-sm">
+                        <span>{item.menu_item?.name || 'Item'} x{item.quantity}</span>
+                        <span>₹{(item.unit_price * item.quantity).toFixed(2)}</span>
+                      </div>
+                    ))}
+                    <Separator className="my-2" />
+                    <div className="flex justify-between font-bold text-lg">
+                      <span>Grand Total</span>
+                      <span>₹{grandTotal.toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  {/* Print Button */}
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={printBill}
+                  >
+                    <Printer className="w-4 h-4 mr-2" />
+                    Print Bill
+                  </Button>
+
+                  {/* Payment Methods */}
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-muted-foreground">Select Payment Method</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <Button
+                        variant="outline"
+                        className="h-20 flex-col gap-2"
+                        onClick={() => processPayment('cash')}
+                        disabled={processingPayment}
+                      >
+                        <Banknote className="w-6 h-6" />
+                        <span>Cash</span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="h-20 flex-col gap-2"
+                        onClick={() => processPayment('card')}
+                        disabled={processingPayment}
+                      >
+                        <CreditCard className="w-6 h-6" />
+                        <span>Card</span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="h-20 flex-col gap-2"
+                        onClick={() => processPayment('upi')}
+                        disabled={processingPayment}
+                      >
+                        <Wallet className="w-6 h-6" />
+                        <span>UPI</span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setShowBillDialog(false)}>
+                    Cancel
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         )}
       </div>
