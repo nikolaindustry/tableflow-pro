@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { RestaurantProvider } from "@/contexts/RestaurantContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
@@ -33,20 +34,20 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
-              <Route path="/onboarding" element={<Onboarding />} />
+              <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
               
               {/* Dashboard routes with restaurant slug */}
-              <Route path="/dashboard" element={<DashboardHome />} />
-              <Route path="/dashboard/:slug" element={<DashboardHome />} />
-              <Route path="/dashboard/:slug/kitchens" element={<Kitchens />} />
-              <Route path="/dashboard/:slug/floors" element={<Floors />} />
-              <Route path="/dashboard/:slug/menu" element={<Menu />} />
-              <Route path="/dashboard/:slug/orders" element={<Orders />} />
-              <Route path="/dashboard/:slug/kitchen-view" element={<KitchenView />} />
-              <Route path="/dashboard/:slug/order-kiosk" element={<OrderKiosk />} />
-              <Route path="/dashboard/:slug/reports" element={<Reports />} />
-              <Route path="/dashboard/:slug/staff" element={<Staff />} />
-              <Route path="/dashboard/:slug/settings" element={<Settings />} />
+              <Route path="/dashboard" element={<ProtectedRoute><DashboardHome /></ProtectedRoute>} />
+              <Route path="/dashboard/:slug" element={<ProtectedRoute><DashboardHome /></ProtectedRoute>} />
+              <Route path="/dashboard/:slug/kitchens" element={<ProtectedRoute><Kitchens /></ProtectedRoute>} />
+              <Route path="/dashboard/:slug/floors" element={<ProtectedRoute><Floors /></ProtectedRoute>} />
+              <Route path="/dashboard/:slug/menu" element={<ProtectedRoute><Menu /></ProtectedRoute>} />
+              <Route path="/dashboard/:slug/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+              <Route path="/dashboard/:slug/kitchen-view" element={<ProtectedRoute><KitchenView /></ProtectedRoute>} />
+              <Route path="/dashboard/:slug/order-kiosk" element={<ProtectedRoute><OrderKiosk /></ProtectedRoute>} />
+              <Route path="/dashboard/:slug/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+              <Route path="/dashboard/:slug/staff" element={<ProtectedRoute><Staff /></ProtectedRoute>} />
+              <Route path="/dashboard/:slug/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
               
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
