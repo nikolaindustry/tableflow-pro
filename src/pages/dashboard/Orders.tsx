@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,7 @@ import {
   Leaf,
   Drumstick,
   Flame,
+  Bell,
 } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -120,7 +121,7 @@ export default function Orders() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!currentRestaurant) return;
 
     try {
@@ -157,11 +158,55 @@ export default function Orders() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentRestaurant]);
 
   useEffect(() => {
     fetchData();
-  }, [currentRestaurant]);
+  }, [fetchData]);
+
+  // Real-time subscription for orders
+  useEffect(() => {
+    if (!currentRestaurant) return;
+
+    const channel = supabase
+      .channel('orders-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+          filter: `restaurant_id=eq.${currentRestaurant.id}`,
+        },
+        (payload) => {
+          console.log('Order change:', payload);
+          fetchData();
+          
+          if (payload.eventType === 'INSERT') {
+            toast.info('New order created!', {
+              icon: <Bell className="w-4 h-4" />,
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'order_items',
+        },
+        () => {
+          console.log('Order items changed');
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentRestaurant, fetchData]);
 
   const resetForm = () => {
     setSelectedTableId('');
