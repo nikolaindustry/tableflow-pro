@@ -860,7 +860,7 @@ export default function OrderKiosk() {
                 </div>
                 
                 <Tabs value={selectedFloorId} onValueChange={setSelectedFloorId} className="h-full flex flex-col">
-                  <div className="flex justify-center mb-8">
+                  <div className="flex justify-start mb-8">
                     <TabsList className="bg-secondary/50 p-1.5 rounded-2xl shadow-sm">
                       {floors.map((floor) => (
                         <TabsTrigger 
