@@ -17,6 +17,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { ChefHat, Plus, Pencil, Trash2 } from 'lucide-react';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 interface Kitchen {
   id: string;
@@ -142,16 +143,19 @@ export default function Kitchens() {
 
   if (!currentRestaurant) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <ChefHat className="w-12 h-12 text-muted-foreground mb-4" />
-        <h2 className="text-xl font-semibold">No Restaurant Selected</h2>
-        <p className="text-muted-foreground">Please select or create a restaurant first</p>
-      </div>
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+          <ChefHat className="w-12 h-12 text-muted-foreground mb-4" />
+          <h2 className="text-xl font-semibold">No Restaurant Selected</h2>
+          <p className="text-muted-foreground">Please select or create a restaurant first</p>
+        </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <DashboardLayout>
+      <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Kitchens</h1>
@@ -299,6 +303,7 @@ export default function Kitchens() {
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }
