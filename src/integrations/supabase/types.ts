@@ -351,6 +351,110 @@ export type Database = {
         }
         Relationships: []
       }
+      shifts: {
+        Row: {
+          created_at: string
+          end_time: string
+          id: string
+          notes: string | null
+          restaurant_id: string
+          shift_date: string
+          staff_member_id: string
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          end_time: string
+          id?: string
+          notes?: string | null
+          restaurant_id: string
+          shift_date: string
+          staff_member_id: string
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          end_time?: string
+          id?: string
+          notes?: string | null
+          restaurant_id?: string
+          shift_date?: string
+          staff_member_id?: string
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shifts_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shifts_staff_member_id_fkey"
+            columns: ["staff_member_id"]
+            isOneToOne: false
+            referencedRelation: "staff_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_members: {
+        Row: {
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          invited_at: string | null
+          is_active: boolean
+          joined_at: string | null
+          phone: string | null
+          restaurant_id: string
+          role: Database["public"]["Enums"]["staff_role"]
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          invited_at?: string | null
+          is_active?: boolean
+          joined_at?: string | null
+          phone?: string | null
+          restaurant_id: string
+          role?: Database["public"]["Enums"]["staff_role"]
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          invited_at?: string | null
+          is_active?: boolean
+          joined_at?: string | null
+          phone?: string | null
+          restaurant_id?: string
+          role?: Database["public"]["Enums"]["staff_role"]
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_members_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tables: {
         Row: {
           capacity: number
@@ -395,11 +499,24 @@ export type Database = {
         Args: { name: string; owner_id: string }
         Returns: string
       }
+      get_staff_role: {
+        Args: { _restaurant_id: string; _user_id: string }
+        Returns: Database["public"]["Enums"]["staff_role"]
+      }
+      has_management_access: {
+        Args: { _restaurant_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_restaurant_owner: {
+        Args: { _restaurant_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       food_type: "veg" | "non_veg" | "egg"
       order_status: "pending" | "cooking" | "ready" | "served" | "cancelled"
       spice_level: "mild" | "medium" | "spicy" | "extra_spicy"
+      staff_role: "owner" | "manager" | "waiter" | "chef"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -530,6 +647,7 @@ export const Constants = {
       food_type: ["veg", "non_veg", "egg"],
       order_status: ["pending", "cooking", "ready", "served", "cancelled"],
       spice_level: ["mild", "medium", "spicy", "extra_spicy"],
+      staff_role: ["owner", "manager", "waiter", "chef"],
     },
   },
 } as const
