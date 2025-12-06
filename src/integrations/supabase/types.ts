@@ -495,6 +495,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_access_restaurant_as_staff: {
+        Args: { _restaurant_id: string; _user_id: string }
+        Returns: boolean
+      }
       generate_restaurant_slug: {
         Args: { name: string; owner_id: string }
         Returns: string
@@ -503,8 +507,13 @@ export type Database = {
         Args: { _restaurant_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["staff_role"]
       }
+      get_user_email: { Args: { _user_id: string }; Returns: string }
       has_management_access: {
         Args: { _restaurant_id: string; _user_id: string }
+        Returns: boolean
+      }
+      has_unlinked_staff_record_by_email: {
+        Args: { _user_id: string }
         Returns: boolean
       }
       is_restaurant_owner: {
