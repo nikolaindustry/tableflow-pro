@@ -1035,71 +1035,117 @@ export default function OrderKiosk() {
                     <p>Tap items to add to order</p>
                   </div>
                 ) : (
-                  cart.map((item) => (
-                    <div key={item.menuItem.id} className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium truncate">{item.menuItem.name}</p>
-                          {item.status && (
-                            <Badge 
-                              variant="outline" 
-                              className={`text-xs ${
-                                item.status === 'ready' 
-                                  ? 'border-success text-success bg-success/10' 
-                                  : item.status === 'cooking'
-                                  ? 'border-warning text-warning bg-warning/10'
-                                  : 'border-muted-foreground'
-                              }`}
-                            >
-                              {item.status === 'cooking' && <ChefHat className="w-3 h-3 mr-1" />}
-                              {item.status === 'ready' && <CheckCircle2 className="w-3 h-3 mr-1" />}
-                              {item.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
-                              {item.status}
-                            </Badge>
-                          )}
+                  <>
+                    {/* Existing Order Items (items with status) */}
+                    {cart.filter(item => item.status).length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                          <Receipt className="w-4 h-4" />
+                          <span>Existing Order</span>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          ₹{item.menuItem.price} each
-                        </p>
+                        {cart.filter(item => item.status).map((item) => (
+                          <div key={item.menuItem.id} className="flex items-center gap-3 bg-muted/30 border border-border/50 rounded-lg p-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium truncate">{item.menuItem.name}</p>
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-xs ${
+                                    item.status === 'ready' 
+                                      ? 'border-success text-success bg-success/10' 
+                                      : item.status === 'cooking'
+                                      ? 'border-warning text-warning bg-warning/10'
+                                      : 'border-muted-foreground'
+                                  }`}
+                                >
+                                  {item.status === 'cooking' && <ChefHat className="w-3 h-3 mr-1" />}
+                                  {item.status === 'ready' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                                  {item.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
+                                  {item.status}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                ₹{item.menuItem.price} each
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="w-8 text-center font-medium text-muted-foreground">x{item.quantity}</span>
+                              <span className="font-medium">₹{item.menuItem.price * item.quantity}</span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          className="h-8 w-8"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            updateQuantity(item.menuItem.id, -1);
-                          }}
-                        >
-                          <Minus className="w-3 h-3" />
-                        </Button>
-                        <span className="w-8 text-center font-medium">{item.quantity}</span>
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          className="h-8 w-8"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            updateQuantity(item.menuItem.id, 1);
-                          }}
-                        >
-                          <Plus className="w-3 h-3" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeFromCart(item.menuItem.id);
-                          }}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
+                    )}
+
+                    {/* Separator between existing and new items */}
+                    {cart.filter(item => item.status).length > 0 && cart.filter(item => !item.status).length > 0 && (
+                      <div className="relative py-2">
+                        <Separator />
+                        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+                          Adding New Items
+                        </span>
                       </div>
-                    </div>
-                  ))
+                    )}
+
+                    {/* New Items (items without status) */}
+                    {cart.filter(item => !item.status).length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                          <Plus className="w-4 h-4" />
+                          <span>New Items</span>
+                        </div>
+                        {cart.filter(item => !item.status).map((item) => (
+                          <div key={item.menuItem.id} className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-lg p-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium truncate">{item.menuItem.name}</p>
+                                <Badge variant="secondary" className="text-xs">New</Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                ₹{item.menuItem.price} each
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                className="h-8 w-8"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateQuantity(item.menuItem.id, -1);
+                                }}
+                              >
+                                <Minus className="w-3 h-3" />
+                              </Button>
+                              <span className="w-8 text-center font-medium">{item.quantity}</span>
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                className="h-8 w-8"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateQuantity(item.menuItem.id, 1);
+                                }}
+                              >
+                                <Plus className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeFromCart(item.menuItem.id);
+                                }}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </ScrollArea>
@@ -1213,71 +1259,117 @@ export default function OrderKiosk() {
                       <p>Tap items to add to order</p>
                     </div>
                   ) : (
-                    cart.map((item) => (
-                      <div key={item.menuItem.id} className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium truncate">{item.menuItem.name}</p>
-                            {item.status && (
-                              <Badge 
-                                variant="outline" 
-                                className={`text-xs ${
-                                  item.status === 'ready' 
-                                    ? 'border-success text-success bg-success/10' 
-                                    : item.status === 'cooking'
-                                    ? 'border-warning text-warning bg-warning/10'
-                                    : 'border-muted-foreground'
-                                }`}
-                              >
-                                {item.status === 'cooking' && <ChefHat className="w-3 h-3 mr-1" />}
-                                {item.status === 'ready' && <CheckCircle2 className="w-3 h-3 mr-1" />}
-                                {item.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
-                                {item.status}
-                              </Badge>
-                            )}
+                    <>
+                      {/* Existing Order Items (items with status) */}
+                      {cart.filter(item => item.status).length > 0 && (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                            <Receipt className="w-4 h-4" />
+                            <span>Existing Order</span>
                           </div>
-                          <p className="text-sm text-muted-foreground">
-                            ₹{item.menuItem.price} each
-                          </p>
+                          {cart.filter(item => item.status).map((item) => (
+                            <div key={item.menuItem.id} className="flex items-center gap-3 bg-muted/30 border border-border/50 rounded-lg p-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium truncate">{item.menuItem.name}</p>
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`text-xs ${
+                                      item.status === 'ready' 
+                                        ? 'border-success text-success bg-success/10' 
+                                        : item.status === 'cooking'
+                                        ? 'border-warning text-warning bg-warning/10'
+                                        : 'border-muted-foreground'
+                                    }`}
+                                  >
+                                    {item.status === 'cooking' && <ChefHat className="w-3 h-3 mr-1" />}
+                                    {item.status === 'ready' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                                    {item.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
+                                    {item.status}
+                                  </Badge>
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                  ₹{item.menuItem.price} each
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="w-8 text-center font-medium text-muted-foreground">x{item.quantity}</span>
+                                <span className="font-medium">₹{item.menuItem.price * item.quantity}</span>
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            size="icon"
-                            variant="outline"
-                            className="h-8 w-8"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              updateQuantity(item.menuItem.id, -1);
-                            }}
-                          >
-                            <Minus className="w-3 h-3" />
-                          </Button>
-                          <span className="w-6 text-center font-medium">{item.quantity}</span>
-                          <Button
-                            size="icon"
-                            variant="outline"
-                            className="h-8 w-8"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              updateQuantity(item.menuItem.id, 1);
-                            }}
-                          >
-                            <Plus className="w-3 h-3" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-destructive"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeFromCart(item.menuItem.id);
-                            }}
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
+                      )}
+
+                      {/* Separator between existing and new items */}
+                      {cart.filter(item => item.status).length > 0 && cart.filter(item => !item.status).length > 0 && (
+                        <div className="relative py-2">
+                          <Separator />
+                          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+                            Adding New Items
+                          </span>
                         </div>
-                      </div>
-                    ))
+                      )}
+
+                      {/* New Items (items without status) */}
+                      {cart.filter(item => !item.status).length > 0 && (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                            <Plus className="w-4 h-4" />
+                            <span>New Items</span>
+                          </div>
+                          {cart.filter(item => !item.status).map((item) => (
+                            <div key={item.menuItem.id} className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-lg p-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium truncate">{item.menuItem.name}</p>
+                                  <Badge variant="secondary" className="text-xs">New</Badge>
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                  ₹{item.menuItem.price} each
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  className="h-8 w-8"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateQuantity(item.menuItem.id, -1);
+                                  }}
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </Button>
+                                <span className="w-6 text-center font-medium">{item.quantity}</span>
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  className="h-8 w-8"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateQuantity(item.menuItem.id, 1);
+                                  }}
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 text-destructive"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    removeFromCart(item.menuItem.id);
+                                  }}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </ScrollArea>
