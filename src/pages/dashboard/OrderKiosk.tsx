@@ -306,6 +306,46 @@ export default function OrderKiosk() {
     };
   }, [selectedTable?.id, activeOrder?.id]);
 
+  // Real-time subscription for table status changes
+  useEffect(() => {
+    if (!currentRestaurant) return;
+
+    const tablesChannel = supabase
+      .channel('tables-status')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'tables',
+        },
+        (payload) => {
+          console.log('Table status updated:', payload);
+          const updatedTable = payload.new as any;
+          
+          // Update local floors/tables state
+          setFloors(prev => prev.map(floor => ({
+            ...floor,
+            tables: floor.tables.map(table =>
+              table.id === updatedTable.id
+                ? { ...table, is_occupied: updatedTable.is_occupied }
+                : table
+            )
+          })));
+
+          // If this is the selected table and it was freed, show notification
+          if (selectedTable?.id === updatedTable.id && !updatedTable.is_occupied) {
+            toast.info('Table has been freed');
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(tablesChannel);
+    };
+  }, [currentRestaurant, selectedTable?.id]);
+
   const handleTableClick = async (table: Table) => {
     setSelectedTable(table);
     setCart([]);
