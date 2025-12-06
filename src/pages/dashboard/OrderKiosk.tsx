@@ -87,6 +87,9 @@ interface ActiveOrder {
   }[];
 }
 
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+
 const FoodTypeIndicator = ({ type }: { type: 'veg' | 'non_veg' | 'egg' }) => {
   const config = {
     veg: { color: 'bg-success', border: 'border-success' },
@@ -131,6 +134,8 @@ export default function OrderKiosk() {
   const [submitting, setSubmitting] = useState(false);
   const [showBillDialog, setShowBillDialog] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [showMobileCart, setShowMobileCart] = useState(false);
+  const isMobile = useIsMobile();
 
   const fetchData = async () => {
     if (!currentRestaurant) return;
@@ -757,17 +762,33 @@ export default function OrderKiosk() {
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
-      {/* Header */}
       <div className="border-b bg-card px-4 py-3 flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-xl font-bold">{currentRestaurant.name}</h1>
           <p className="text-sm text-muted-foreground">Order Kiosk</p>
         </div>
-        {selectedTable && (
-          <Badge variant="outline" className="text-lg px-4 py-2">
-            Table {selectedTable.table_number}
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {selectedTable && isMobile && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setShowMobileCart(true)}
+              className="relative"
+            >
+              <ShoppingCart className="w-4 h-4" />
+              {cart.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {cart.length}
+                </span>
+              )}
+            </Button>
+          )}
+          {selectedTable && (
+            <Badge variant="outline" className="text-lg px-4 py-2">
+              Table {selectedTable.table_number}
+            </Badge>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
@@ -904,8 +925,8 @@ export default function OrderKiosk() {
           )}
         </div>
 
-        {/* Right Side - Cart (only when table selected) */}
-        {selectedTable && (
+        {/* Right Side - Cart (only when table selected, hidden on mobile) */}
+        {selectedTable && !isMobile && (
           <div className="w-80 lg:w-96 border-l bg-card flex flex-col overflow-hidden">
             <div className="p-4 border-b flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
@@ -1081,88 +1102,276 @@ export default function OrderKiosk() {
                 Mark Table Available
               </Button>
             </div>
-
-            {/* Billing Dialog */}
-            <Dialog open={showBillDialog} onOpenChange={setShowBillDialog}>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <Receipt className="w-5 h-5" />
-                    Bill for Table {selectedTable?.table_number}
-                  </DialogTitle>
-                </DialogHeader>
-                
-                <div className="space-y-4">
-                  {/* Bill Summary */}
-                  <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                    {activeOrder?.items.map((item) => (
-                      <div key={item.id} className="flex justify-between text-sm">
-                        <span>{item.menu_item?.name || 'Item'} x{item.quantity}</span>
-                        <span>₹{(item.unit_price * item.quantity).toFixed(2)}</span>
-                      </div>
-                    ))}
-                    <Separator className="my-2" />
-                    <div className="flex justify-between font-bold text-lg">
-                      <span>Grand Total</span>
-                      <span>₹{grandTotal.toFixed(2)}</span>
-                    </div>
-                  </div>
-
-                  {/* Print Button */}
-                  <Button 
-                    variant="outline" 
-                    className="w-full"
-                    onClick={printBill}
-                  >
-                    <Printer className="w-4 h-4 mr-2" />
-                    Print Bill
-                  </Button>
-
-                  {/* Payment Methods */}
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-muted-foreground">Select Payment Method</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      <Button
-                        variant="outline"
-                        className="h-20 flex-col gap-2"
-                        onClick={() => processPayment('cash')}
-                        disabled={processingPayment}
-                      >
-                        <Banknote className="w-6 h-6" />
-                        <span>Cash</span>
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="h-20 flex-col gap-2"
-                        onClick={() => processPayment('card')}
-                        disabled={processingPayment}
-                      >
-                        <CreditCard className="w-6 h-6" />
-                        <span>Card</span>
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="h-20 flex-col gap-2"
-                        onClick={() => processPayment('upi')}
-                        disabled={processingPayment}
-                      >
-                        <Wallet className="w-6 h-6" />
-                        <span>UPI</span>
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                <DialogFooter>
-                  <Button variant="ghost" onClick={() => setShowBillDialog(false)}>
-                    Cancel
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
           </div>
         )}
+
+        {/* Mobile Cart Sheet */}
+        {selectedTable && isMobile && (
+          <Sheet open={showMobileCart} onOpenChange={setShowMobileCart}>
+            <SheetContent side="right" className="w-full sm:max-w-md p-0 flex flex-col">
+              <SheetHeader className="p-4 border-b shrink-0">
+                <SheetTitle className="flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5" />
+                  Current Order - Table {selectedTable.table_number}
+                </SheetTitle>
+              </SheetHeader>
+
+              {/* Active Order Items */}
+              {activeOrder && activeOrder.items.length > 0 && (
+                <div className="p-3 border-b bg-muted/50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Receipt className="w-4 h-4" />
+                    <span className="text-sm font-medium">Running Order</span>
+                    <Badge 
+                      variant={activeOrder.status === 'ready' ? 'default' : 'outline'} 
+                      className={`text-xs ${
+                        activeOrder.status === 'ready' 
+                          ? 'bg-success text-success-foreground' 
+                          : activeOrder.status === 'cooking'
+                          ? 'border-warning text-warning'
+                          : ''
+                      }`}
+                    >
+                      {activeOrder.status === 'cooking' && <ChefHat className="w-3 h-3 mr-1" />}
+                      {activeOrder.status === 'ready' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                      {activeOrder.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
+                      {activeOrder.status}
+                    </Badge>
+                  </div>
+                  <div className="space-y-2">
+                    {activeOrder.items.map((item) => (
+                      <div key={item.id} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          {item.status === 'ready' ? (
+                            <CheckCircle2 className="w-4 h-4 text-success" />
+                          ) : item.status === 'cooking' ? (
+                            <ChefHat className="w-4 h-4 text-warning animate-pulse" />
+                          ) : (
+                            <Clock className="w-4 h-4 text-muted-foreground" />
+                          )}
+                          <span className={item.status === 'ready' ? 'text-success' : 'text-muted-foreground'}>
+                            {item.menu_item?.name || 'Item'} x{item.quantity}
+                          </span>
+                        </div>
+                        <span>₹{item.unit_price * item.quantity}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <Separator className="my-2" />
+                  <div className="flex justify-between text-sm font-medium">
+                    <span>Subtotal</span>
+                    <span>₹{activeOrder.total_amount}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Cart Items */}
+              <ScrollArea className="flex-1">
+                <div className="p-4 space-y-3">
+                  {cart.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <ShoppingCart className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <p>Tap items to add to order</p>
+                    </div>
+                  ) : (
+                    cart.map((item) => (
+                      <div key={item.menuItem.id} className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium truncate">{item.menuItem.name}</p>
+                            {item.status && (
+                              <Badge 
+                                variant="outline" 
+                                className={`text-xs ${
+                                  item.status === 'ready' 
+                                    ? 'border-success text-success bg-success/10' 
+                                    : item.status === 'cooking'
+                                    ? 'border-warning text-warning bg-warning/10'
+                                    : 'border-muted-foreground'
+                                }`}
+                              >
+                                {item.status === 'cooking' && <ChefHat className="w-3 h-3 mr-1" />}
+                                {item.status === 'ready' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                                {item.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
+                                {item.status}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            ₹{item.menuItem.price} each
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateQuantity(item.menuItem.id, -1);
+                            }}
+                          >
+                            <Minus className="w-3 h-3" />
+                          </Button>
+                          <span className="w-6 text-center font-medium">{item.quantity}</span>
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateQuantity(item.menuItem.id, 1);
+                            }}
+                          >
+                            <Plus className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeFromCart(item.menuItem.id);
+                            }}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+
+              {/* Cart Footer */}
+              <div className="p-4 border-t space-y-3 shrink-0">
+                {cart.length > 0 && (
+                  <>
+                    <div className="flex justify-between text-lg font-bold">
+                      <span>New Items Total</span>
+                      <span>₹{cartTotal}</span>
+                    </div>
+                    <Button 
+                      className="w-full" 
+                      size="lg" 
+                      onClick={() => {
+                        submitOrder();
+                        setShowMobileCart(false);
+                      }}
+                      disabled={submitting}
+                    >
+                      <Send className="w-4 h-4 mr-2" />
+                      {submitting ? 'Sending...' : 'Send to Kitchen'}
+                    </Button>
+                  </>
+                )}
+                {activeOrder && activeOrder.items.length > 0 && (
+                  <Button 
+                    className="w-full bg-success hover:bg-success/90"
+                    size="lg"
+                    onClick={() => {
+                      setShowBillDialog(true);
+                      setShowMobileCart(false);
+                    }}
+                  >
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    Generate Bill (₹{grandTotal})
+                  </Button>
+                )}
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => {
+                    markTableFree();
+                    setShowMobileCart(false);
+                  }}
+                >
+                  Mark Table Available
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
+        )}
       </div>
+
+      {/* Billing Dialog */}
+      <Dialog open={showBillDialog} onOpenChange={setShowBillDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="w-5 h-5" />
+              Bill for Table {selectedTable?.table_number}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Bill Summary */}
+            <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+              {activeOrder?.items.map((item) => (
+                <div key={item.id} className="flex justify-between text-sm">
+                  <span>{item.menu_item?.name || 'Item'} x{item.quantity}</span>
+                  <span>₹{(item.unit_price * item.quantity).toFixed(2)}</span>
+                </div>
+              ))}
+              <Separator className="my-2" />
+              <div className="flex justify-between font-bold text-lg">
+                <span>Grand Total</span>
+                <span>₹{grandTotal.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Print Button */}
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={printBill}
+            >
+              <Printer className="w-4 h-4 mr-2" />
+              Print Bill
+            </Button>
+
+            {/* Payment Methods */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">Select Payment Method</p>
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  variant="outline"
+                  className="h-20 flex-col gap-2"
+                  onClick={() => processPayment('cash')}
+                  disabled={processingPayment}
+                >
+                  <Banknote className="w-6 h-6" />
+                  <span>Cash</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-20 flex-col gap-2"
+                  onClick={() => processPayment('card')}
+                  disabled={processingPayment}
+                >
+                  <CreditCard className="w-6 h-6" />
+                  <span>Card</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-20 flex-col gap-2"
+                  onClick={() => processPayment('upi')}
+                  disabled={processingPayment}
+                >
+                  <Wallet className="w-6 h-6" />
+                  <span>UPI</span>
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowBillDialog(false)}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
