@@ -273,7 +273,7 @@ export default function OrderKiosk() {
         },
         (payload) => {
           console.log('Order item updated:', payload);
-          const updatedItem = payload.new;
+          const updatedItem = payload.new as any;
           
           setActiveOrder(prev => {
             if (!prev) return null;
@@ -286,6 +286,14 @@ export default function OrderKiosk() {
               )
             };
           });
+
+          // Also update cart item status
+          setCart(prev => prev.map(cartItem => {
+            if (cartItem.menuItem.id === updatedItem.menu_item_id) {
+              return { ...cartItem, status: updatedItem.status };
+            }
+            return cartItem;
+          }));
 
           // Find the item name for the toast
           const itemName = activeOrder.items.find(i => i.id === updatedItem.id)?.menu_item?.name || 'Item';
