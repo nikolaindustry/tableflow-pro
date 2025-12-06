@@ -14,6 +14,7 @@ import {
   Users,
   ArrowRight,
 } from 'lucide-react';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 interface Stats {
   kitchens: number;
@@ -83,16 +84,18 @@ export default function DashboardHome() {
 
   if (!currentRestaurant) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
-          <ChefHat className="w-8 h-8 text-muted-foreground" />
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+          <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
+            <ChefHat className="w-8 h-8 text-muted-foreground" />
+          </div>
+          <h2 className="text-xl font-semibold mb-2">No Restaurant Selected</h2>
+          <p className="text-muted-foreground mb-4">Create your first restaurant to get started</p>
+          <Button asChild variant="gradient">
+            <Link to="/onboarding">Create Restaurant</Link>
+          </Button>
         </div>
-        <h2 className="text-xl font-semibold mb-2">No Restaurant Selected</h2>
-        <p className="text-muted-foreground mb-4">Create your first restaurant to get started</p>
-        <Button asChild variant="gradient">
-          <Link to="/onboarding">Create Restaurant</Link>
-        </Button>
-      </div>
+      </DashboardLayout>
     );
   }
 
@@ -153,8 +156,9 @@ export default function DashboardHome() {
   ];
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      {/* Header */}
+    <DashboardLayout>
+      <div className="space-y-8 animate-fade-in">
+        {/* Header */}
       <div>
         <h1 className="text-2xl lg:text-3xl font-bold text-foreground">
           Welcome back!
@@ -272,7 +276,8 @@ export default function DashboardHome() {
             </div>
           </CardContent>
         </Card>
-      )}
-    </div>
+        )}
+      </div>
+    </DashboardLayout>
   );
 }

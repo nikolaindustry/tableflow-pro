@@ -39,6 +39,7 @@ import {
   Flame,
 } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
 type FoodType = Database['public']['Enums']['food_type'];
@@ -281,11 +282,13 @@ export default function Orders() {
 
   if (!currentRestaurant) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <ShoppingBag className="w-12 h-12 text-muted-foreground mb-4" />
-        <h2 className="text-xl font-semibold">No Restaurant Selected</h2>
-        <p className="text-muted-foreground">Please select or create a restaurant first</p>
-      </div>
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+          <ShoppingBag className="w-12 h-12 text-muted-foreground mb-4" />
+          <h2 className="text-xl font-semibold">No Restaurant Selected</h2>
+          <p className="text-muted-foreground">Please select or create a restaurant first</p>
+        </div>
+      </DashboardLayout>
     );
   }
 
@@ -378,7 +381,8 @@ export default function Orders() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <DashboardLayout>
+      <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Orders</h1>
@@ -596,6 +600,7 @@ export default function Orders() {
           )}
         </TabsContent>
       </Tabs>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

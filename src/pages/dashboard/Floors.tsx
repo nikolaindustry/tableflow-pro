@@ -23,6 +23,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Layers, Plus, Pencil, Trash2, Users } from 'lucide-react';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 interface Table {
   id: string;
@@ -213,18 +214,21 @@ export default function Floors() {
 
   if (!currentRestaurant) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <Layers className="w-12 h-12 text-muted-foreground mb-4" />
-        <h2 className="text-xl font-semibold">No Restaurant Selected</h2>
-        <p className="text-muted-foreground">Please select or create a restaurant first</p>
-      </div>
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+          <Layers className="w-12 h-12 text-muted-foreground mb-4" />
+          <h2 className="text-xl font-semibold">No Restaurant Selected</h2>
+          <p className="text-muted-foreground">Please select or create a restaurant first</p>
+        </div>
+      </DashboardLayout>
     );
   }
 
   const selectedFloor = floors.find(f => f.id === selectedFloorId);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <DashboardLayout>
+      <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Floors & Tables</h1>
@@ -483,6 +487,7 @@ export default function Floors() {
           ))}
         </Tabs>
       )}
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }
