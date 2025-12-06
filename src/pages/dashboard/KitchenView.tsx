@@ -18,6 +18,7 @@ import {
   ArrowRight,
   Volume2,
   VolumeX,
+  Printer,
 } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -222,6 +223,116 @@ export default function KitchenView() {
     return `${minutes} mins ago`;
   };
 
+  const printKitchenTicket = (order: Order) => {
+    const printWindow = window.open('', '_blank', 'width=300,height=600');
+    if (!printWindow) {
+      toast.error('Please allow popups to print tickets');
+      return;
+    }
+
+    const orderTime = new Date(order.created_at).toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+    const orderDate = new Date(order.created_at).toLocaleDateString();
+
+    const ticketHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Kitchen Ticket</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { 
+              font-family: 'Courier New', monospace; 
+              padding: 10px; 
+              width: 280px;
+              font-size: 12px;
+            }
+            .header { 
+              text-align: center; 
+              border-bottom: 2px dashed #000; 
+              padding-bottom: 10px; 
+              margin-bottom: 10px;
+            }
+            .header h1 { font-size: 18px; font-weight: bold; }
+            .header .table-info { font-size: 24px; font-weight: bold; margin: 8px 0; }
+            .header .time { font-size: 14px; }
+            .items { margin: 10px 0; }
+            .item { 
+              display: flex; 
+              justify-content: space-between; 
+              padding: 6px 0;
+              border-bottom: 1px dotted #ccc;
+            }
+            .item-name { font-weight: bold; flex: 1; }
+            .item-qty { 
+              font-size: 16px; 
+              font-weight: bold; 
+              min-width: 40px; 
+              text-align: right; 
+            }
+            .item-type { font-size: 10px; color: #666; }
+            .veg { color: green; }
+            .non-veg { color: red; }
+            .notes { 
+              margin-top: 10px; 
+              padding: 8px; 
+              background: #f5f5f5; 
+              border-radius: 4px;
+              font-style: italic;
+            }
+            .footer { 
+              text-align: center; 
+              margin-top: 15px; 
+              padding-top: 10px;
+              border-top: 2px dashed #000; 
+              font-size: 10px;
+            }
+            @media print {
+              body { width: 100%; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>🍳 KITCHEN ORDER</h1>
+            <div class="table-info">${order.table ? order.table.table_number : 'TAKEAWAY'}</div>
+            ${order.table ? `<div>${order.table.floor.name}</div>` : ''}
+            <div class="time">${orderDate} ${orderTime}</div>
+          </div>
+          <div class="items">
+            ${order.order_items.map(item => `
+              <div class="item">
+                <div>
+                  <span class="item-type ${item.menu_item?.food_type === 'veg' ? 'veg' : 'non-veg'}">
+                    ${item.menu_item?.food_type === 'veg' ? '🟢' : '🔴'}
+                  </span>
+                  <span class="item-name">${item.menu_item?.name || 'Unknown'}</span>
+                </div>
+                <span class="item-qty">x${item.quantity}</span>
+              </div>
+            `).join('')}
+          </div>
+          ${order.notes ? `<div class="notes"><strong>Notes:</strong> ${order.notes}</div>` : ''}
+          <div class="footer">
+            Order ID: ${order.id.slice(0, 8).toUpperCase()}<br>
+            ${currentRestaurant?.name || 'Restaurant'}
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.onafterprint = function() { window.close(); }
+            }
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(ticketHtml);
+    printWindow.document.close();
+  };
+
   const renderFoodTypeIcon = (type: FoodType) => (
     <span className={type === 'veg' ? 'text-success' : 'text-destructive'}>
       {type === 'veg' ? <Leaf className="w-4 h-4" /> : <Drumstick className="w-4 h-4" />}
@@ -287,9 +398,20 @@ export default function KitchenView() {
                           <CardTitle className="text-base">Takeaway</CardTitle>
                         )}
                       </div>
-                      <div className="flex items-center gap-1 text-muted-foreground text-xs">
-                        <Timer className="w-3 h-3" />
-                        {getTimeSinceOrder(order.created_at)}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          onClick={() => printKitchenTicket(order)}
+                          title="Print ticket"
+                        >
+                          <Printer className="w-3 h-3" />
+                        </Button>
+                        <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                          <Timer className="w-3 h-3" />
+                          {getTimeSinceOrder(order.created_at)}
+                        </div>
                       </div>
                     </div>
                   </CardHeader>
