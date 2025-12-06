@@ -38,6 +38,7 @@ const navItems = [
   { href: '/dashboard/menu', label: 'Menu', icon: BookOpen },
   { href: '/dashboard/orders', label: 'Orders', icon: ShoppingBag },
   { href: '/dashboard/kitchen-view', label: 'Kitchen View', icon: ChefHat },
+  { href: '/dashboard/order-kiosk', label: 'Order Kiosk', icon: ShoppingBag },
 ];
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
