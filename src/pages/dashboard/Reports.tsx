@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useRestaurant } from '@/contexts/RestaurantContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -37,10 +37,15 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight,
-  FileText
+  FileText,
+  Download,
+  FileSpreadsheet
 } from 'lucide-react';
-import { format, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO, eachDayOfInterval, eachHourOfInterval, startOfToday, addHours } from 'date-fns';
+import { format, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO, eachDayOfInterval, eachHourOfInterval, addHours } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 type OrderStatus = 'pending' | 'cooking' | 'ready' | 'served' | 'cancelled';
 
@@ -90,6 +95,7 @@ type DateRange = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
 
 export default function Reports() {
   const { currentRestaurant } = useRestaurant();
+  const { toast } = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRange>('today');
@@ -98,6 +104,7 @@ export default function Reports() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
   const ordersPerPage = 10;
 
   // Calculate date range
@@ -314,6 +321,168 @@ export default function Reports() {
 
   const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
 
+  // Export to CSV
+  const exportToCSV = useCallback(() => {
+    if (filteredOrders.length === 0) {
+      toast({ title: "No data to export", variant: "destructive" });
+      return;
+    }
+
+    setExporting(true);
+
+    try {
+      const headers = ['Order ID', 'Date & Time', 'Table', 'Items', 'Status', 'Total (₹)'];
+      const rows = filteredOrders.map(order => [
+        order.id.slice(0, 8).toUpperCase(),
+        format(parseISO(order.created_at), 'yyyy-MM-dd HH:mm'),
+        order.table?.table_number || 'N/A',
+        order.order_items.map(i => `${i.menu_item?.name || 'Unknown'} x${i.quantity}`).join('; '),
+        STATUS_CONFIG[order.status].label,
+        Number(order.total_amount).toFixed(2)
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `orders_${format(getDateRange.from, 'yyyy-MM-dd')}_to_${format(getDateRange.to, 'yyyy-MM-dd')}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({ title: "CSV exported successfully" });
+    } catch (error) {
+      toast({ title: "Export failed", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  }, [filteredOrders, getDateRange, toast]);
+
+  // Export to PDF
+  const exportToPDF = useCallback(() => {
+    if (!currentRestaurant) return;
+    if (orders.length === 0) {
+      toast({ title: "No data to export", variant: "destructive" });
+      return;
+    }
+
+    setExporting(true);
+
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      // Header
+      doc.setFontSize(20);
+      doc.setTextColor(40, 40, 40);
+      doc.text(currentRestaurant.name, pageWidth / 2, 20, { align: 'center' });
+
+      doc.setFontSize(14);
+      doc.setTextColor(100, 100, 100);
+      doc.text('Sales Report', pageWidth / 2, 28, { align: 'center' });
+
+      doc.setFontSize(10);
+      doc.text(
+        `Period: ${format(getDateRange.from, 'PP')} - ${format(getDateRange.to, 'PP')}`,
+        pageWidth / 2,
+        35,
+        { align: 'center' }
+      );
+
+      // Summary Section
+      doc.setFontSize(12);
+      doc.setTextColor(40, 40, 40);
+      doc.text('Summary', 14, 48);
+
+      const summaryData = [
+        ['Total Orders', String(stats.totalOrders)],
+        ['Completed Orders', String(stats.completedOrders)],
+        ['Cancelled Orders', String(stats.cancelledOrders)],
+        ['Total Revenue', `₹${stats.totalRevenue.toLocaleString()}`],
+        ['Average Order Value', `₹${stats.avgOrderValue.toFixed(0)}`],
+      ];
+
+      autoTable(doc, {
+        startY: 52,
+        head: [['Metric', 'Value']],
+        body: summaryData,
+        theme: 'striped',
+        headStyles: { fillColor: [200, 80, 50] },
+        margin: { left: 14, right: 14 },
+      });
+
+      // Top Items Section
+      const finalY1 = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+      doc.text('Top Selling Items', 14, finalY1 + 12);
+
+      if (popularItems.length > 0) {
+        autoTable(doc, {
+          startY: finalY1 + 16,
+          head: [['Item Name', 'Quantity Sold', 'Revenue (₹)']],
+          body: popularItems.map(item => [
+            item.name,
+            String(item.quantity),
+            item.revenue.toLocaleString()
+          ]),
+          theme: 'striped',
+          headStyles: { fillColor: [200, 80, 50] },
+          margin: { left: 14, right: 14 },
+        });
+      }
+
+      // Orders Table
+      const finalY2 = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+      doc.addPage();
+      doc.text('Order Details', 14, 20);
+
+      const ordersTableData = filteredOrders.slice(0, 50).map(order => [
+        order.id.slice(0, 8).toUpperCase(),
+        format(parseISO(order.created_at), 'MM/dd HH:mm'),
+        order.table?.table_number || '-',
+        STATUS_CONFIG[order.status].label,
+        `₹${Number(order.total_amount).toLocaleString()}`
+      ]);
+
+      autoTable(doc, {
+        startY: 24,
+        head: [['Order ID', 'Date', 'Table', 'Status', 'Total']],
+        body: ordersTableData,
+        theme: 'striped',
+        headStyles: { fillColor: [200, 80, 50] },
+        margin: { left: 14, right: 14 },
+        styles: { fontSize: 8 },
+      });
+
+      // Footer
+      const pageCount = doc.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.text(
+          `Generated on ${format(new Date(), 'PPp')} | Page ${i} of ${pageCount}`,
+          pageWidth / 2,
+          doc.internal.pageSize.getHeight() - 10,
+          { align: 'center' }
+        );
+      }
+
+      doc.save(`report_${format(getDateRange.from, 'yyyy-MM-dd')}_to_${format(getDateRange.to, 'yyyy-MM-dd')}.pdf`);
+      toast({ title: "PDF exported successfully" });
+    } catch (error) {
+      console.error('PDF export error:', error);
+      toast({ title: "Export failed", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  }, [currentRestaurant, orders, filteredOrders, stats, popularItems, getDateRange, toast]);
+
   if (!currentRestaurant) {
     return (
       <DashboardLayout>
@@ -334,8 +503,41 @@ export default function Reports() {
             <p className="text-muted-foreground mt-1">Track your restaurant performance</p>
           </div>
           
-          {/* Date Range Selector */}
+          {/* Date Range & Export */}
           <div className="flex items-center gap-2 flex-wrap">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" disabled={exporting || loading}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Export
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-40 p-2" align="end">
+                <div className="space-y-1">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="w-full justify-start" 
+                    onClick={exportToPDF}
+                    disabled={exporting}
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    PDF Report
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="w-full justify-start" 
+                    onClick={exportToCSV}
+                    disabled={exporting}
+                  >
+                    <FileSpreadsheet className="w-4 h-4 mr-2" />
+                    CSV Data
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+
             <Select value={dateRange} onValueChange={(value: DateRange) => setDateRange(value)}>
               <SelectTrigger className="w-[140px]">
                 <SelectValue placeholder="Select range" />
