@@ -187,6 +187,7 @@ export default function OrderKiosk() {
 
   const fetchActiveOrder = async (tableId: string) => {
     try {
+      // Fetch ALL active orders for this table (not just one)
       const { data, error } = await supabase
         .from('orders')
         .select(`
@@ -194,22 +195,30 @@ export default function OrderKiosk() {
           order_items (id, menu_item_id, quantity, unit_price, status)
         `)
         .eq('table_id', tableId)
-        .in('status', ['pending', 'cooking'])
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+        .in('status', ['pending', 'cooking', 'ready'])
+        .order('created_at', { ascending: true });
 
-      if (error && error.code !== 'PGRST116') throw error;
+      if (error) throw error;
       
-      if (data) {
-        // Fetch menu item details for the order items
-        const itemsWithDetails = await Promise.all(
-          data.order_items.map(async (item: any) => {
+      if (data && data.length > 0) {
+        // Combine all orders into one consolidated view
+        const allItems: any[] = [];
+        let totalAmount = 0;
+        
+        for (const order of data) {
+          totalAmount += order.total_amount;
+          for (const item of order.order_items) {
             const menuItem = menuItems.find(m => m.id === item.menu_item_id);
-            return { ...item, menu_item: menuItem };
-          })
-        );
-        setActiveOrder({ ...data, items: itemsWithDetails });
+            allItems.push({ ...item, menu_item: menuItem, order_id: order.id });
+          }
+        }
+        
+        // Use the first order as the base but include all items
+        setActiveOrder({ 
+          ...data[0], 
+          items: allItems,
+          total_amount: totalAmount
+        });
       } else {
         setActiveOrder(null);
       }
@@ -367,6 +376,7 @@ export default function OrderKiosk() {
     // If table is occupied, load existing order items into cart
     if (table.is_occupied) {
       try {
+        // Fetch ALL active orders for this table
         const { data, error } = await supabase
           .from('orders')
           .select(`
@@ -374,32 +384,47 @@ export default function OrderKiosk() {
             order_items (id, menu_item_id, quantity, unit_price, status)
           `)
           .eq('table_id', table.id)
-          .in('status', ['pending', 'cooking'])
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
+          .in('status', ['pending', 'cooking', 'ready'])
+          .order('created_at', { ascending: true });
 
-        if (!error && data) {
-          // Populate cart with existing order items
+        if (!error && data && data.length > 0) {
+          // Populate cart with ALL existing order items from ALL orders
           const cartItems: CartItem[] = [];
-          for (const orderItem of data.order_items) {
-            const menuItem = menuItems.find(m => m.id === orderItem.menu_item_id);
-            if (menuItem) {
-              cartItems.push({
-                menuItem,
-                quantity: orderItem.quantity,
-                status: orderItem.status
-              });
+          const allItems: any[] = [];
+          let totalAmount = 0;
+          
+          for (const order of data) {
+            totalAmount += order.total_amount;
+            for (const orderItem of order.order_items) {
+              const menuItem = menuItems.find(m => m.id === orderItem.menu_item_id);
+              if (menuItem) {
+                // Check if already in cart (avoid duplicates)
+                const existingCartItem = cartItems.find(c => c.menuItem.id === menuItem.id);
+                if (existingCartItem) {
+                  existingCartItem.quantity += orderItem.quantity;
+                } else {
+                  cartItems.push({
+                    menuItem,
+                    quantity: orderItem.quantity,
+                    status: orderItem.status
+                  });
+                }
+                allItems.push({
+                  ...orderItem,
+                  menu_item: menuItem,
+                  order_id: order.id
+                });
+              }
             }
           }
           setCart(cartItems);
           
-          // Also fetch menu item details for active order display
-          const itemsWithDetails = data.order_items.map((item: any) => ({
-            ...item,
-            menu_item: menuItems.find(m => m.id === item.menu_item_id)
-          }));
-          setActiveOrder({ ...data, items: itemsWithDetails });
+          // Use the first order as base with combined items
+          setActiveOrder({ 
+            ...data[0], 
+            items: allItems,
+            total_amount: totalAmount
+          });
         }
       } catch (error) {
         console.error('Error fetching existing order:', error);
