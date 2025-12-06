@@ -181,12 +181,21 @@ export default function KitchenView() {
 
       if (error) throw error;
 
-      // Also update all order items if moving to cooking or ready
-      if (newStatus === 'cooking' || newStatus === 'ready') {
+      // Also update order items based on their current status
+      if (newStatus === 'cooking') {
+        // Only update pending items to cooking (preserve ready items)
         await supabase
           .from('order_items')
           .update({ status: newStatus })
-          .eq('order_id', orderId);
+          .eq('order_id', orderId)
+          .eq('status', 'pending');
+      } else if (newStatus === 'ready') {
+        // Only update non-ready items to ready (e.g., cooking -> ready)
+        await supabase
+          .from('order_items')
+          .update({ status: newStatus })
+          .eq('order_id', orderId)
+          .neq('status', 'ready');
       }
 
       // If served, free up the table
