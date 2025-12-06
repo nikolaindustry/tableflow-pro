@@ -350,8 +350,47 @@ export default function OrderKiosk() {
     setSelectedTable(table);
     setCart([]);
     
-    // Mark table as occupied if not already
-    if (!table.is_occupied) {
+    // If table is occupied, load existing order items into cart
+    if (table.is_occupied) {
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select(`
+            id, status, total_amount, created_at,
+            order_items (id, menu_item_id, quantity, unit_price, status)
+          `)
+          .eq('table_id', table.id)
+          .in('status', ['pending', 'cooking'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (!error && data) {
+          // Populate cart with existing order items
+          const cartItems: CartItem[] = [];
+          for (const orderItem of data.order_items) {
+            const menuItem = menuItems.find(m => m.id === orderItem.menu_item_id);
+            if (menuItem) {
+              cartItems.push({
+                menuItem,
+                quantity: orderItem.quantity
+              });
+            }
+          }
+          setCart(cartItems);
+          
+          // Also fetch menu item details for active order display
+          const itemsWithDetails = data.order_items.map((item: any) => ({
+            ...item,
+            menu_item: menuItems.find(m => m.id === item.menu_item_id)
+          }));
+          setActiveOrder({ ...data, items: itemsWithDetails });
+        }
+      } catch (error) {
+        console.error('Error fetching existing order:', error);
+      }
+    } else {
+      // Mark table as occupied if not already
       await supabase
         .from('tables')
         .update({ is_occupied: true })
