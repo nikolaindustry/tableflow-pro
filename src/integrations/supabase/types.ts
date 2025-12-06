@@ -324,6 +324,7 @@ export type Database = {
           name: string
           owner_id: string
           phone: string | null
+          slug: string
           updated_at: string
         }
         Insert: {
@@ -334,6 +335,7 @@ export type Database = {
           name: string
           owner_id: string
           phone?: string | null
+          slug: string
           updated_at?: string
         }
         Update: {
@@ -344,6 +346,7 @@ export type Database = {
           name?: string
           owner_id?: string
           phone?: string | null
+          slug?: string
           updated_at?: string
         }
         Relationships: []
@@ -388,7 +391,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_restaurant_slug: {
+        Args: { name: string; owner_id: string }
+        Returns: string
+      }
     }
     Enums: {
       food_type: "veg" | "non_veg" | "egg"

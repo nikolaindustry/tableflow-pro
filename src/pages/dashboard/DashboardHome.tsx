@@ -99,12 +99,14 @@ export default function DashboardHome() {
     );
   }
 
+  const slug = currentRestaurant.slug;
+
   const statCards = [
     {
       title: 'Kitchens',
       value: stats.kitchens,
       icon: ChefHat,
-      href: '/dashboard/kitchens',
+      href: `/dashboard/${slug}/kitchens`,
       color: 'text-primary',
       bgColor: 'bg-primary/10',
     },
@@ -112,7 +114,7 @@ export default function DashboardHome() {
       title: 'Tables',
       value: stats.tables,
       icon: Layers,
-      href: '/dashboard/floors',
+      href: `/dashboard/${slug}/floors`,
       color: 'text-success',
       bgColor: 'bg-success/10',
     },
@@ -120,7 +122,7 @@ export default function DashboardHome() {
       title: 'Menu Items',
       value: stats.menuItems,
       icon: BookOpen,
-      href: '/dashboard/menu',
+      href: `/dashboard/${slug}/menu`,
       color: 'text-warning',
       bgColor: 'bg-warning/10',
     },
@@ -128,7 +130,7 @@ export default function DashboardHome() {
       title: 'Active Orders',
       value: stats.activeOrders,
       icon: ShoppingBag,
-      href: '/dashboard/orders',
+      href: `/dashboard/${slug}/orders`,
       color: 'text-destructive',
       bgColor: 'bg-destructive/10',
     },
@@ -138,19 +140,19 @@ export default function DashboardHome() {
     {
       title: 'New Order',
       description: 'Create a new order for a table',
-      href: '/dashboard/orders',
+      href: `/dashboard/${slug}/orders`,
       icon: ShoppingBag,
     },
     {
       title: 'Kitchen View',
       description: 'View and manage kitchen orders',
-      href: '/dashboard/kitchen-view',
+      href: `/dashboard/${slug}/kitchen-view`,
       icon: ChefHat,
     },
     {
       title: 'Manage Menu',
       description: 'Add or edit menu items',
-      href: '/dashboard/menu',
+      href: `/dashboard/${slug}/menu`,
       icon: BookOpen,
     },
   ];
@@ -243,7 +245,7 @@ export default function DashboardHome() {
                     <span>Add your first kitchen</span>
                   </div>
                   <Button asChild size="sm">
-                    <Link to="/dashboard/kitchens">Add Kitchen</Link>
+                    <Link to={`/dashboard/${slug}/kitchens`}>Add Kitchen</Link>
                   </Button>
                 </div>
               )}
@@ -256,7 +258,7 @@ export default function DashboardHome() {
                     <span>Create floors and tables</span>
                   </div>
                   <Button asChild size="sm">
-                    <Link to="/dashboard/floors">Add Floor</Link>
+                    <Link to={`/dashboard/${slug}/floors`}>Add Floor</Link>
                   </Button>
                 </div>
               )}
@@ -269,7 +271,7 @@ export default function DashboardHome() {
                     <span>Add menu categories and items</span>
                   </div>
                   <Button asChild size="sm">
-                    <Link to="/dashboard/menu">Add Menu</Link>
+                    <Link to={`/dashboard/${slug}/menu`}>Add Menu</Link>
                   </Button>
                 </div>
               )}
