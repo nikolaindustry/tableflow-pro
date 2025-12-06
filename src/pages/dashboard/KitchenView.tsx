@@ -203,7 +203,7 @@ export default function KitchenView() {
     }
   };
 
-  const handleUpdateItemStatus = async (itemId: string, newStatus: OrderStatus) => {
+  const handleUpdateItemStatus = async (itemId: string, newStatus: OrderStatus, orderId: string) => {
     try {
       const { error } = await supabase
         .from('order_items')
@@ -211,6 +211,28 @@ export default function KitchenView() {
         .eq('id', itemId);
 
       if (error) throw error;
+      
+      // If marking as ready, check if all items in the order are now ready
+      if (newStatus === 'ready') {
+        const order = orders.find(o => o.id === orderId);
+        if (order) {
+          // Check if all OTHER items are already ready (current item is being updated)
+          const allItemsReady = order.order_items.every(
+            item => item.id === itemId || item.status === 'ready'
+          );
+          
+          if (allItemsReady) {
+            // Auto-update order status to ready
+            await supabase
+              .from('orders')
+              .update({ status: 'ready' })
+              .eq('id', orderId);
+            toast.success('All items ready - Order marked as Ready!');
+            return;
+          }
+        }
+      }
+      
       toast.success(`Item marked as ${STATUS_CONFIG[newStatus].label}`);
     } catch (error: any) {
       toast.error(error.message);
@@ -450,7 +472,7 @@ export default function KitchenView() {
                                 size="sm"
                                 variant="outline"
                                 className="h-7 text-xs"
-                                onClick={() => handleUpdateItemStatus(item.id, 'ready')}
+                                onClick={() => handleUpdateItemStatus(item.id, 'ready', order.id)}
                               >
                                 <CheckCircle className="w-3 h-3 mr-1" />
                                 Done
