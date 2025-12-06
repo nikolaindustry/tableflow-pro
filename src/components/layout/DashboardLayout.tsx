@@ -24,7 +24,7 @@ import {
   Plus,
   Menu,
   X,
-  Settings,
+  Settings as SettingsIcon,
   Building2,
   Monitor,
 } from 'lucide-react';
@@ -42,6 +42,7 @@ const getNavItems = (slug: string) => [
   { href: `/dashboard/${slug}/orders`, label: 'Orders', icon: ShoppingBag },
   { href: `/dashboard/${slug}/kitchen-view`, label: 'Kitchen View', icon: ChefHat },
   { href: `/dashboard/${slug}/order-kiosk`, label: 'Order Kiosk', icon: Monitor },
+  { href: `/dashboard/${slug}/settings`, label: 'Settings', icon: SettingsIcon },
 ];
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
@@ -216,7 +217,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
                 <DropdownMenuItem onClick={() => navigate(`/dashboard/${currentRestaurant?.slug}/settings`)}>
-                  <Settings className="w-4 h-4 mr-2" />
+                  <SettingsIcon className="w-4 h-4 mr-2" />
                   Settings
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
