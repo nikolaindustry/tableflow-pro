@@ -77,7 +77,9 @@ export default function Auth() {
         <Card className="shadow-lg border-border/50">
           <CardHeader className="text-center pb-2">
             <CardTitle className="text-xl">Welcome</CardTitle>
-            <CardDescription>Sign in to manage your restaurants</CardDescription>
+            <CardDescription>
+              Sign in as a restaurant owner or staff member
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="login" className="w-full">
