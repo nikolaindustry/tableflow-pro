@@ -69,6 +69,7 @@ interface CartItem {
   menuItem: MenuItem;
   quantity: number;
   notes?: string;
+  status?: 'pending' | 'cooking' | 'ready' | 'served' | 'cancelled';
 }
 
 interface ActiveOrder {
@@ -373,7 +374,8 @@ export default function OrderKiosk() {
             if (menuItem) {
               cartItems.push({
                 menuItem,
-                quantity: orderItem.quantity
+                quantity: orderItem.quantity,
+                status: orderItem.status
               });
             }
           }
@@ -968,7 +970,26 @@ export default function OrderKiosk() {
                   cart.map((item) => (
                     <div key={item.menuItem.id} className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{item.menuItem.name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium truncate">{item.menuItem.name}</p>
+                          {item.status && (
+                            <Badge 
+                              variant="outline" 
+                              className={`text-xs ${
+                                item.status === 'ready' 
+                                  ? 'border-success text-success bg-success/10' 
+                                  : item.status === 'cooking'
+                                  ? 'border-warning text-warning bg-warning/10'
+                                  : 'border-muted-foreground'
+                              }`}
+                            >
+                              {item.status === 'cooking' && <ChefHat className="w-3 h-3 mr-1" />}
+                              {item.status === 'ready' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                              {item.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
+                              {item.status}
+                            </Badge>
+                          )}
+                        </div>
                         <p className="text-sm text-muted-foreground">
                           ₹{item.menuItem.price} each
                         </p>
