@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,10 @@ import {
   Send,
   Trash2,
   Search,
-  Receipt
+  Receipt,
+  CheckCircle2,
+  Clock,
+  ChefHat
 } from 'lucide-react';
 
 interface Table {
@@ -211,6 +214,90 @@ export default function OrderKiosk() {
       fetchActiveOrder(selectedTable.id);
     }
   }, [selectedTable, menuItems]);
+
+  // Real-time subscription for order updates
+  useEffect(() => {
+    if (!selectedTable || !activeOrder) return;
+
+    console.log('Setting up realtime subscription for order:', activeOrder.id);
+
+    // Subscribe to order status changes
+    const orderChannel = supabase
+      .channel(`order-${activeOrder.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `id=eq.${activeOrder.id}`
+        },
+        (payload) => {
+          console.log('Order updated:', payload);
+          const newStatus = payload.new.status;
+          setActiveOrder(prev => prev ? { ...prev, status: newStatus } : null);
+          
+          if (newStatus === 'ready') {
+            toast.success('Order is ready for serving!', {
+              icon: <CheckCircle2 className="w-5 h-5 text-success" />,
+              duration: 5000
+            });
+          } else if (newStatus === 'cooking') {
+            toast.info('Kitchen started cooking your order', {
+              icon: <ChefHat className="w-5 h-5" />,
+              duration: 3000
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    // Subscribe to order item status changes
+    const itemsChannel = supabase
+      .channel(`order-items-${activeOrder.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'order_items',
+          filter: `order_id=eq.${activeOrder.id}`
+        },
+        (payload) => {
+          console.log('Order item updated:', payload);
+          const updatedItem = payload.new;
+          
+          setActiveOrder(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              items: prev.items.map(item =>
+                item.id === updatedItem.id
+                  ? { ...item, status: updatedItem.status }
+                  : item
+              )
+            };
+          });
+
+          // Find the item name for the toast
+          const itemName = activeOrder.items.find(i => i.id === updatedItem.id)?.menu_item?.name || 'Item';
+          
+          if (updatedItem.status === 'ready') {
+            toast.success(`${itemName} is ready!`, {
+              icon: <CheckCircle2 className="w-5 h-5 text-success" />,
+              duration: 4000
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log('Cleaning up realtime subscriptions');
+      supabase.removeChannel(orderChannel);
+      supabase.removeChannel(itemsChannel);
+    };
+  }, [selectedTable?.id, activeOrder?.id]);
 
   const handleTableClick = async (table: Table) => {
     setSelectedTable(table);
@@ -548,19 +635,40 @@ export default function OrderKiosk() {
             {/* Active Order Items */}
             {activeOrder && activeOrder.items.length > 0 && (
               <div className="p-3 border-b bg-muted/50">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-3">
                   <Receipt className="w-4 h-4" />
                   <span className="text-sm font-medium">Running Order</span>
-                  <Badge variant="outline" className="text-xs">
+                  <Badge 
+                    variant={activeOrder.status === 'ready' ? 'default' : 'outline'} 
+                    className={`text-xs ${
+                      activeOrder.status === 'ready' 
+                        ? 'bg-success text-success-foreground' 
+                        : activeOrder.status === 'cooking'
+                        ? 'border-warning text-warning'
+                        : ''
+                    }`}
+                  >
+                    {activeOrder.status === 'cooking' && <ChefHat className="w-3 h-3 mr-1" />}
+                    {activeOrder.status === 'ready' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                    {activeOrder.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
                     {activeOrder.status}
                   </Badge>
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-2">
                   {activeOrder.items.map((item) => (
-                    <div key={item.id} className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">
-                        {item.menu_item?.name || 'Item'} x{item.quantity}
-                      </span>
+                    <div key={item.id} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        {item.status === 'ready' ? (
+                          <CheckCircle2 className="w-4 h-4 text-success" />
+                        ) : item.status === 'cooking' ? (
+                          <ChefHat className="w-4 h-4 text-warning animate-pulse" />
+                        ) : (
+                          <Clock className="w-4 h-4 text-muted-foreground" />
+                        )}
+                        <span className={item.status === 'ready' ? 'text-success' : 'text-muted-foreground'}>
+                          {item.menu_item?.name || 'Item'} x{item.quantity}
+                        </span>
+                      </div>
                       <span>₹{item.unit_price * item.quantity}</span>
                     </div>
                   ))}
