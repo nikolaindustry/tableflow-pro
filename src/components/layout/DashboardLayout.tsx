@@ -2,7 +2,9 @@ import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRestaurant } from '@/contexts/RestaurantContext';
+import { useActiveOrderCount } from '@/hooks/useActiveOrderCount';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,6 +47,7 @@ const getNavItems = (slug: string) => [
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, signOut } = useAuth();
   const { restaurants, currentRestaurant, setCurrentRestaurant } = useRestaurant();
+  const activeOrderCount = useActiveOrderCount(currentRestaurant?.id);
   const location = useLocation();
   const navigate = useNavigate();
   const { slug } = useParams();
@@ -169,6 +172,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             {navItems.map((item) => {
               const isActive = location.pathname === item.href || 
                 (item.label === 'Dashboard' && location.pathname === `/dashboard/${currentRestaurant?.slug}`);
+              const showBadge = item.label === 'Orders' && activeOrderCount > 0;
               return (
                 <Link
                   key={item.href}
@@ -182,7 +186,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   )}
                 >
                   <item.icon className="w-5 h-5" />
-                  {item.label}
+                  <span className="flex-1">{item.label}</span>
+                  {showBadge && (
+                    <Badge 
+                      variant="destructive" 
+                      className="h-5 min-w-5 px-1.5 text-xs font-semibold animate-pulse"
+                    >
+                      {activeOrderCount}
+                    </Badge>
+                  )}
                 </Link>
               );
             })}
