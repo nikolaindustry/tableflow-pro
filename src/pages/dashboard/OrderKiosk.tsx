@@ -852,55 +852,93 @@ export default function OrderKiosk() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {!selectedTable ? (
             // Table Selection View
-            <div className="flex-1 p-4 overflow-auto">
-              <Tabs value={selectedFloorId} onValueChange={setSelectedFloorId} className="h-full flex flex-col">
-                <TabsList className="shrink-0 mb-4">
-                  {floors.map((floor) => (
-                    <TabsTrigger key={floor.id} value={floor.id}>
-                      {floor.name}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
+            <div className="flex-1 p-6 overflow-auto">
+              <div className="max-w-6xl mx-auto">
+                <div className="text-center mb-8">
+                  <h2 className="text-2xl font-bold text-foreground mb-2">Select a Table</h2>
+                  <p className="text-muted-foreground">Choose a table to start taking orders</p>
+                </div>
+                
+                <Tabs value={selectedFloorId} onValueChange={setSelectedFloorId} className="h-full flex flex-col">
+                  <div className="flex justify-center mb-8">
+                    <TabsList className="bg-secondary/50 p-1.5 rounded-2xl shadow-sm">
+                      {floors.map((floor) => (
+                        <TabsTrigger 
+                          key={floor.id} 
+                          value={floor.id}
+                          className="data-[state=active]:bg-card data-[state=active]:shadow-md rounded-xl px-6 py-2.5 font-medium transition-all"
+                        >
+                          {floor.name}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </div>
 
-                {floors.map((floor) => (
-                  <TabsContent key={floor.id} value={floor.id} className="flex-1 mt-0">
-                    {floor.tables.length === 0 ? (
-                      <div className="flex items-center justify-center h-full text-muted-foreground">
-                        No tables on this floor
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
-                        {floor.tables
-                          .sort((a, b) => a.table_number.localeCompare(b.table_number))
-                          .map((table) => (
-                            <button
-                              key={table.id}
-                              onClick={() => handleTableClick(table)}
-                              className={`aspect-square rounded-xl border-2 p-3 transition-all duration-200 hover:scale-105 hover:shadow-lg ${
-                                table.is_occupied
-                                  ? 'border-destructive/50 bg-destructive/10 hover:border-destructive'
-                                  : 'border-success/50 bg-success/10 hover:border-success'
-                              }`}
-                            >
-                              <div className="h-full flex flex-col items-center justify-center">
-                                <span className="text-xl font-bold">{table.table_number}</span>
-                                <div className="flex items-center gap-1 text-muted-foreground text-sm mt-1">
-                                  <Users className="w-3 h-3" />
-                                  <span>{table.capacity}</span>
+                  {floors.map((floor) => (
+                    <TabsContent key={floor.id} value={floor.id} className="flex-1 mt-0 animate-fade-in">
+                      {floor.tables.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+                          <Users className="w-12 h-12 mb-4 opacity-30" />
+                          <p className="text-lg">No tables on this floor</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                          {floor.tables
+                            .sort((a, b) => a.table_number.localeCompare(b.table_number))
+                            .map((table) => (
+                              <button
+                                key={table.id}
+                                onClick={() => handleTableClick(table)}
+                                className={`group relative rounded-2xl p-5 transition-all duration-300 hover:scale-[1.03] hover:-translate-y-1 ${
+                                  table.is_occupied
+                                    ? 'bg-gradient-to-br from-destructive/5 to-destructive/15 border-2 border-destructive/30 hover:border-destructive/50 hover:shadow-lg hover:shadow-destructive/10'
+                                    : 'bg-gradient-to-br from-success/5 to-success/15 border-2 border-success/30 hover:border-success/50 hover:shadow-lg hover:shadow-success/10'
+                                }`}
+                              >
+                                {/* Status indicator dot */}
+                                <div className={`absolute top-3 right-3 w-2.5 h-2.5 rounded-full ${
+                                  table.is_occupied 
+                                    ? 'bg-destructive animate-pulse' 
+                                    : 'bg-success'
+                                }`} />
+                                
+                                <div className="flex flex-col items-center justify-center py-3">
+                                  {/* Table icon/representation */}
+                                  <div className={`w-16 h-16 rounded-xl flex items-center justify-center mb-3 transition-colors ${
+                                    table.is_occupied
+                                      ? 'bg-destructive/10 group-hover:bg-destructive/15'
+                                      : 'bg-success/10 group-hover:bg-success/15'
+                                  }`}>
+                                    <span className={`text-2xl font-bold ${
+                                      table.is_occupied ? 'text-destructive' : 'text-success'
+                                    }`}>
+                                      {table.table_number}
+                                    </span>
+                                  </div>
+                                  
+                                  {/* Capacity */}
+                                  <div className="flex items-center gap-1.5 text-muted-foreground mb-2">
+                                    <Users className="w-4 h-4" />
+                                    <span className="text-sm font-medium">{table.capacity} seats</span>
+                                  </div>
+                                  
+                                  {/* Status badge */}
+                                  <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
+                                    table.is_occupied 
+                                      ? 'bg-destructive/15 text-destructive' 
+                                      : 'bg-success/15 text-success'
+                                  }`}>
+                                    {table.is_occupied ? 'Occupied' : 'Available'}
+                                  </span>
                                 </div>
-                                <span className={`text-xs mt-1 ${
-                                  table.is_occupied ? 'text-destructive' : 'text-success'
-                                }`}>
-                                  {table.is_occupied ? 'Occupied' : 'Available'}
-                                </span>
-                              </div>
-                            </button>
-                          ))}
-                      </div>
-                    )}
-                  </TabsContent>
-                ))}
-              </Tabs>
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                    </TabsContent>
+                  ))}
+                </Tabs>
+              </div>
             </div>
           ) : (
             // Menu Selection View
