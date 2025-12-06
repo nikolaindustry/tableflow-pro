@@ -1,0 +1,124 @@
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from './AuthContext';
+import { toast } from 'sonner';
+
+interface Restaurant {
+  id: string;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  gstin: string | null;
+  created_at: string;
+}
+
+interface RestaurantContextType {
+  restaurants: Restaurant[];
+  currentRestaurant: Restaurant | null;
+  setCurrentRestaurant: (restaurant: Restaurant | null) => void;
+  loading: boolean;
+  createRestaurant: (name: string, address?: string, phone?: string, gstin?: string) => Promise<Restaurant | null>;
+  refreshRestaurants: () => Promise<void>;
+}
+
+const RestaurantContext = createContext<RestaurantContextType | undefined>(undefined);
+
+export function RestaurantProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [currentRestaurant, setCurrentRestaurant] = useState<Restaurant | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchRestaurants = async () => {
+    if (!user) {
+      setRestaurants([]);
+      setCurrentRestaurant(null);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('restaurants')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setRestaurants(data || []);
+      
+      if (data && data.length > 0 && !currentRestaurant) {
+        setCurrentRestaurant(data[0]);
+      }
+    } catch (error) {
+      console.error('Error fetching restaurants:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRestaurants();
+  }, [user]);
+
+  const createRestaurant = async (
+    name: string,
+    address?: string,
+    phone?: string,
+    gstin?: string
+  ): Promise<Restaurant | null> => {
+    if (!user) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('restaurants')
+        .insert({
+          owner_id: user.id,
+          name,
+          address: address || null,
+          phone: phone || null,
+          gstin: gstin || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setRestaurants((prev) => [data, ...prev]);
+      setCurrentRestaurant(data);
+      toast.success('Restaurant created successfully!');
+      return data;
+    } catch (error: any) {
+      console.error('Error creating restaurant:', error);
+      toast.error(error.message || 'Failed to create restaurant');
+      return null;
+    }
+  };
+
+  const refreshRestaurants = async () => {
+    await fetchRestaurants();
+  };
+
+  return (
+    <RestaurantContext.Provider
+      value={{
+        restaurants,
+        currentRestaurant,
+        setCurrentRestaurant,
+        loading,
+        createRestaurant,
+        refreshRestaurants,
+      }}
+    >
+      {children}
+    </RestaurantContext.Provider>
+  );
+}
+
+export function useRestaurant() {
+  const context = useContext(RestaurantContext);
+  if (context === undefined) {
+    throw new Error('useRestaurant must be used within a RestaurantProvider');
+  }
+  return context;
+}
