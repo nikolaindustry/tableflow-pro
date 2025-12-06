@@ -646,6 +646,18 @@ export default function OrderKiosk() {
     return cartTotal;
   }, [cartTotal]);
 
+  // Check if there are new items to send (items without a status are new)
+  const hasNewItems = useMemo(() => {
+    return cart.some(item => !item.status);
+  }, [cart]);
+
+  // Calculate total for only new items
+  const newItemsTotal = useMemo(() => {
+    return cart
+      .filter(item => !item.status)
+      .reduce((sum, item) => sum + (item.menuItem.price * item.quantity), 0);
+  }, [cart]);
+
   const processPayment = async (paymentMethod: 'cash' | 'card' | 'upi') => {
     if (!selectedTable || !activeOrder) return;
     
@@ -1094,11 +1106,11 @@ export default function OrderKiosk() {
 
             {/* Cart Footer */}
             <div className="p-4 border-t space-y-3 shrink-0">
-              {cart.length > 0 && (
+              {hasNewItems && (
                 <>
                   <div className="flex justify-between text-lg font-bold">
                     <span>New Items Total</span>
-                    <span>₹{cartTotal}</span>
+                    <span>₹{newItemsTotal}</span>
                   </div>
                   <Button 
                     className="w-full" 
@@ -1272,11 +1284,11 @@ export default function OrderKiosk() {
 
               {/* Cart Footer */}
               <div className="p-4 border-t space-y-3 shrink-0">
-                {cart.length > 0 && (
+                {hasNewItems && (
                   <>
                     <div className="flex justify-between text-lg font-bold">
                       <span>New Items Total</span>
-                      <span>₹{cartTotal}</span>
+                      <span>₹{newItemsTotal}</span>
                     </div>
                     <Button 
                       className="w-full" 
