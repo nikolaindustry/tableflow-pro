@@ -16,6 +16,7 @@ import Orders from "./pages/dashboard/Orders";
 import KitchenView from "./pages/dashboard/KitchenView";
 import OrderKiosk from "./pages/dashboard/OrderKiosk";
 import Settings from "./pages/dashboard/Settings";
+import Reports from "./pages/dashboard/Reports";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,7 @@ const App = () => (
               <Route path="/dashboard/:slug/orders" element={<Orders />} />
               <Route path="/dashboard/:slug/kitchen-view" element={<KitchenView />} />
               <Route path="/dashboard/:slug/order-kiosk" element={<OrderKiosk />} />
+              <Route path="/dashboard/:slug/reports" element={<Reports />} />
               <Route path="/dashboard/:slug/settings" element={<Settings />} />
               
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

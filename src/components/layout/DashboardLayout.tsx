@@ -27,6 +27,7 @@ import {
   Settings as SettingsIcon,
   Building2,
   Monitor,
+  BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -42,6 +43,7 @@ const getNavItems = (slug: string) => [
   { href: `/dashboard/${slug}/orders`, label: 'Orders', icon: ShoppingBag },
   { href: `/dashboard/${slug}/kitchen-view`, label: 'Kitchen View', icon: ChefHat },
   { href: `/dashboard/${slug}/order-kiosk`, label: 'Order Kiosk', icon: Monitor },
+  { href: `/dashboard/${slug}/reports`, label: 'Reports', icon: BarChart3 },
   { href: `/dashboard/${slug}/settings`, label: 'Settings', icon: SettingsIcon },
 ];
 
