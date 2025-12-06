@@ -11,6 +11,7 @@ import Onboarding from "./pages/Onboarding";
 import DashboardHome from "./pages/dashboard/DashboardHome";
 import Kitchens from "./pages/dashboard/Kitchens";
 import Floors from "./pages/dashboard/Floors";
+import Menu from "./pages/dashboard/Menu";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
               <Route path="/dashboard" element={<DashboardHome />} />
               <Route path="/dashboard/kitchens" element={<Kitchens />} />
               <Route path="/dashboard/floors" element={<Floors />} />
+              <Route path="/dashboard/menu" element={<Menu />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
