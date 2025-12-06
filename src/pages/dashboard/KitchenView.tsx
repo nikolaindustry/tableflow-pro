@@ -573,9 +573,8 @@ export default function KitchenView() {
             'Ready to Serve',
             readyOrders,
             CheckCircle,
-            'bg-success/20 text-success-foreground',
-            'served',
-            'Mark Served'
+            'bg-success/20 text-success-foreground'
+            // No next status - billing must be done via Order Kiosk before marking as served
           )}
         </div>
       )}
