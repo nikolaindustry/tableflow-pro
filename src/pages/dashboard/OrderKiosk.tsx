@@ -208,6 +208,8 @@ export default function OrderKiosk() {
         for (const order of data) {
           totalAmount += order.total_amount;
           for (const item of order.order_items) {
+            // Skip served items - they shouldn't appear in active order view
+            if (item.status === 'served') continue;
             const menuItem = menuItems.find(m => m.id === item.menu_item_id);
             allItems.push({ ...item, menu_item: menuItem, order_id: order.id });
           }
@@ -399,10 +401,15 @@ export default function OrderKiosk() {
           for (const order of data) {
             totalAmount += order.total_amount;
             for (const orderItem of order.order_items) {
+              // Skip served items - they should not appear in the cart
+              if (orderItem.status === 'served') continue;
+              
               const menuItem = menuItems.find(m => m.id === orderItem.menu_item_id);
               if (menuItem) {
-                // Check if already in cart (avoid duplicates)
-                const existingCartItem = cartItems.find(c => c.menuItem.id === menuItem.id);
+                // Check if already in cart with SAME status (avoid duplicates)
+                const existingCartItem = cartItems.find(
+                  c => c.menuItem.id === menuItem.id && c.status === orderItem.status
+                );
                 if (existingCartItem) {
                   existingCartItem.quantity += orderItem.quantity;
                 } else {

@@ -371,9 +371,18 @@ export default function KitchenView() {
     </span>
   );
 
-  const pendingOrders = orders.filter((o) => o.status === 'pending');
-  const cookingOrders = orders.filter((o) => o.status === 'cooking');
-  const readyOrders = orders.filter((o) => o.status === 'ready');
+  // Filter orders that have at least one item matching the column status
+  // An order should appear in 'pending' column if it has pending items, etc.
+  const pendingOrders = orders.filter((o) => 
+    o.order_items.some(item => item.status === 'pending')
+  );
+  const cookingOrders = orders.filter((o) => 
+    o.order_items.some(item => item.status === 'cooking')
+  );
+  const readyOrders = orders.filter((o) => 
+    o.order_items.some(item => item.status === 'ready') && 
+    !o.order_items.some(item => item.status === 'pending' || item.status === 'cooking')
+  );
 
   if (!currentRestaurant) {
     return (
@@ -451,7 +460,18 @@ export default function KitchenView() {
                   </CardHeader>
                   <CardContent className="pt-0">
                     <div className="space-y-2 mb-3">
-                      {order.order_items.map((item) => (
+                      {order.order_items
+                        .filter((item) => {
+                          // Only show items relevant to this column
+                          // Pending column: show pending items
+                          // Cooking column: show cooking items (and pending that are being started)
+                          // Ready column: show ready items
+                          if (title === 'Pending') return item.status === 'pending';
+                          if (title === 'Cooking') return item.status === 'cooking' || item.status === 'pending';
+                          if (title === 'Ready') return item.status === 'ready';
+                          return true;
+                        })
+                        .map((item) => (
                         <div
                           key={item.id}
                           className={`flex items-center justify-between p-2 rounded-lg border ${
@@ -476,7 +496,7 @@ export default function KitchenView() {
                                 {item.menu_item.preparation_time}m
                               </span>
                             )}
-                            {order.status === 'cooking' && item.status !== 'ready' && (
+                            {item.status === 'cooking' && (
                               <Button
                                 size="sm"
                                 variant="outline"
