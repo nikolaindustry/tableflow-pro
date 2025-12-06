@@ -456,31 +456,38 @@ export default function OrderKiosk() {
 
   const addToCart = (menuItem: MenuItem) => {
     setCart(prev => {
-      const existing = prev.find(item => item.menuItem.id === menuItem.id);
-      if (existing) {
+      // Look for an existing NEW item (without status) for this menu item
+      const existingNewItem = prev.find(item => item.menuItem.id === menuItem.id && !item.status);
+      
+      if (existingNewItem) {
+        // Increment quantity of existing new item
         return prev.map(item =>
-          item.menuItem.id === menuItem.id
+          item.menuItem.id === menuItem.id && !item.status
             ? { ...item, quantity: item.quantity + 1 }
             : item
         );
       }
+      
+      // Add as a new item (even if same item exists with a status like ready/cooking)
       return [...prev, { menuItem, quantity: 1 }];
     });
   };
 
   const removeFromCart = (menuItemId: string) => {
-    setCart(prev => prev.filter(item => item.menuItem.id !== menuItemId));
+    // Only remove NEW items (without status)
+    setCart(prev => prev.filter(item => !(item.menuItem.id === menuItemId && !item.status)));
   };
 
   const updateQuantity = (menuItemId: string, delta: number) => {
     setCart(prev =>
       prev.map(item => {
-        if (item.menuItem.id === menuItemId) {
+        // Only update NEW items (without status)
+        if (item.menuItem.id === menuItemId && !item.status) {
           const newQty = item.quantity + delta;
           return newQty > 0 ? { ...item, quantity: newQty } : item;
         }
         return item;
-      }).filter(item => item.quantity > 0)
+      }).filter(item => item.quantity > 0 || item.status) // Keep existing order items even if somehow quantity becomes 0
     );
   };
 
@@ -926,12 +933,16 @@ export default function OrderKiosk() {
               <ScrollArea className="flex-1 p-4">
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {filteredMenuItems.map((item) => {
-                    const inCart = cart.find(c => c.menuItem.id === item.id);
+                    // Count existing order items (with status) and new items separately
+                    const existingItem = cart.find(c => c.menuItem.id === item.id && c.status);
+                    const newItem = cart.find(c => c.menuItem.id === item.id && !c.status);
+                    const hasAnyInCart = existingItem || newItem;
+                    
                     return (
                       <Card 
                         key={item.id} 
                         className={`cursor-pointer transition-all hover:shadow-md ${
-                          inCart ? 'ring-2 ring-primary' : ''
+                          newItem ? 'ring-2 ring-primary' : existingItem ? 'ring-1 ring-muted-foreground' : ''
                         }`}
                         onClick={() => addToCart(item)}
                       >
@@ -948,11 +959,18 @@ export default function OrderKiosk() {
                           )}
                           <div className="flex items-center justify-between mt-3">
                             <span className="font-bold text-primary">₹{item.price}</span>
-                            {inCart && (
-                              <Badge variant="secondary" className="text-xs">
-                                x{inCart.quantity}
-                              </Badge>
-                            )}
+                            <div className="flex items-center gap-1">
+                              {existingItem && (
+                                <Badge variant="outline" className="text-xs border-muted-foreground text-muted-foreground">
+                                  x{existingItem.quantity}
+                                </Badge>
+                              )}
+                              {newItem && (
+                                <Badge variant="default" className="text-xs">
+                                  +{newItem.quantity}
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
