@@ -301,9 +301,12 @@ export default function OrderKiosk() {
             };
           });
 
-          // Also update cart item status
+          // Also update cart item status - only for items that ALREADY have a status (existing order items)
+          // New items (without status) should NOT be affected by status updates from existing items
           setCart(prev => prev.map(cartItem => {
-            if (cartItem.menuItem.id === updatedItem.menu_item_id) {
+            // Only update if this cart item already has a status (is an existing order item)
+            // AND matches the updated item's menu_item_id
+            if (cartItem.status && cartItem.menuItem.id === updatedItem.menu_item_id) {
               return { ...cartItem, status: updatedItem.status };
             }
             return cartItem;
