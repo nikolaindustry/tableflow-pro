@@ -31,27 +31,37 @@ import {
   Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Database } from '@/integrations/supabase/types';
+
+type StaffRole = Database['public']['Enums']['staff_role'];
 
 interface DashboardLayoutProps {
   children: ReactNode;
 }
 
-const getNavItems = (slug: string) => [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  roles?: StaffRole[]; // If undefined, visible to all
+}
+
+const getNavItems = (slug: string): NavItem[] => [
   { href: `/dashboard/${slug}`, label: 'Dashboard', icon: LayoutDashboard },
-  { href: `/dashboard/${slug}/kitchens`, label: 'Kitchens', icon: ChefHat },
-  { href: `/dashboard/${slug}/floors`, label: 'Floors & Tables', icon: Layers },
-  { href: `/dashboard/${slug}/menu`, label: 'Menu', icon: BookOpen },
+  { href: `/dashboard/${slug}/kitchens`, label: 'Kitchens', icon: ChefHat, roles: ['owner', 'manager'] },
+  { href: `/dashboard/${slug}/floors`, label: 'Floors & Tables', icon: Layers, roles: ['owner', 'manager'] },
+  { href: `/dashboard/${slug}/menu`, label: 'Menu', icon: BookOpen, roles: ['owner', 'manager'] },
   { href: `/dashboard/${slug}/orders`, label: 'Orders', icon: ShoppingBag },
-  { href: `/dashboard/${slug}/kitchen-view`, label: 'Kitchen View', icon: ChefHat },
-  { href: `/dashboard/${slug}/order-kiosk`, label: 'Order Kiosk', icon: Monitor },
-  { href: `/dashboard/${slug}/reports`, label: 'Reports', icon: BarChart3 },
-  { href: `/dashboard/${slug}/staff`, label: 'Staff', icon: Users },
-  { href: `/dashboard/${slug}/settings`, label: 'Settings', icon: SettingsIcon },
+  { href: `/dashboard/${slug}/kitchen-view`, label: 'Kitchen View', icon: ChefHat, roles: ['owner', 'manager', 'chef'] },
+  { href: `/dashboard/${slug}/order-kiosk`, label: 'Order Kiosk', icon: Monitor, roles: ['owner', 'manager', 'waiter'] },
+  { href: `/dashboard/${slug}/reports`, label: 'Reports', icon: BarChart3, roles: ['owner', 'manager'] },
+  { href: `/dashboard/${slug}/staff`, label: 'Staff', icon: Users, roles: ['owner', 'manager'] },
+  { href: `/dashboard/${slug}/settings`, label: 'Settings', icon: SettingsIcon, roles: ['owner'] },
 ];
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, signOut } = useAuth();
-  const { restaurants, currentRestaurant, setCurrentRestaurant } = useRestaurant();
+  const { restaurants, staffRestaurants, currentRestaurant, currentRole, setCurrentRestaurant } = useRestaurant();
   const activeOrderCount = useActiveOrderCount(currentRestaurant?.id);
   const location = useLocation();
   const navigate = useNavigate();
@@ -100,7 +110,19 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   };
 
-  const navItems = currentRestaurant ? getNavItems(currentRestaurant.slug) : [];
+  // Filter nav items based on role
+  const allNavItems = currentRestaurant ? getNavItems(currentRestaurant.slug) : [];
+  const navItems = allNavItems.filter(item => {
+    if (!item.roles) return true; // Visible to all
+    if (!currentRole) return false;
+    return item.roles.includes(currentRole);
+  });
+
+  // Combine owned restaurants with staff restaurants for selector
+  const allRestaurants = [
+    ...restaurants.map(r => ({ ...r, role: 'owner' as StaffRole, isOwner: true })),
+    ...staffRestaurants.filter(sr => !restaurants.find(r => r.id === sr.id)),
+  ];
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -152,7 +174,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
-                {restaurants.map((restaurant) => (
+                {allRestaurants.map((restaurant) => (
                   <DropdownMenuItem
                     key={restaurant.id}
                     onClick={() => handleRestaurantChange(restaurant)}
@@ -160,14 +182,21 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                       currentRestaurant?.id === restaurant.id && "bg-accent"
                     )}
                   >
-                    {restaurant.name}
+                    <div className="flex items-center justify-between w-full">
+                      <span>{restaurant.name}</span>
+                      <Badge variant="outline" className="ml-2 text-xs capitalize">
+                        {restaurant.role}
+                      </Badge>
+                    </div>
                   </DropdownMenuItem>
                 ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate('/onboarding')}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Restaurant
-                </DropdownMenuItem>
+                {currentRole === 'owner' && <DropdownMenuSeparator />}
+                {currentRole === 'owner' && (
+                  <DropdownMenuItem onClick={() => navigate('/onboarding')}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Restaurant
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -207,6 +236,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
           {/* User Menu */}
           <div className="p-4 border-t border-sidebar-border">
+            <div className="mb-2 px-2">
+              <Badge variant="outline" className="text-xs capitalize">
+                {currentRole || 'No role'}
+              </Badge>
+            </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -220,11 +254,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
-                <DropdownMenuItem onClick={() => navigate(`/dashboard/${currentRestaurant?.slug}/settings`)}>
-                  <SettingsIcon className="w-4 h-4 mr-2" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                {currentRole === 'owner' && (
+                  <DropdownMenuItem onClick={() => navigate(`/dashboard/${currentRestaurant?.slug}/settings`)}>
+                    <SettingsIcon className="w-4 h-4 mr-2" />
+                    Settings
+                  </DropdownMenuItem>
+                )}
+                {currentRole === 'owner' && <DropdownMenuSeparator />}
                 <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
                   <LogOut className="w-4 h-4 mr-2" />
                   Sign Out
