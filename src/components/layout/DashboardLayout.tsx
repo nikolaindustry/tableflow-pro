@@ -1,5 +1,5 @@
-import { ReactNode, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { ReactNode, useState, useEffect } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRestaurant } from '@/contexts/RestaurantContext';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,7 @@ import {
   X,
   Settings,
   Building2,
+  Monitor,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -31,14 +32,14 @@ interface DashboardLayoutProps {
   children: ReactNode;
 }
 
-const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/dashboard/kitchens', label: 'Kitchens', icon: ChefHat },
-  { href: '/dashboard/floors', label: 'Floors & Tables', icon: Layers },
-  { href: '/dashboard/menu', label: 'Menu', icon: BookOpen },
-  { href: '/dashboard/orders', label: 'Orders', icon: ShoppingBag },
-  { href: '/dashboard/kitchen-view', label: 'Kitchen View', icon: ChefHat },
-  { href: '/dashboard/order-kiosk', label: 'Order Kiosk', icon: ShoppingBag },
+const getNavItems = (slug: string) => [
+  { href: `/dashboard/${slug}`, label: 'Dashboard', icon: LayoutDashboard },
+  { href: `/dashboard/${slug}/kitchens`, label: 'Kitchens', icon: ChefHat },
+  { href: `/dashboard/${slug}/floors`, label: 'Floors & Tables', icon: Layers },
+  { href: `/dashboard/${slug}/menu`, label: 'Menu', icon: BookOpen },
+  { href: `/dashboard/${slug}/orders`, label: 'Orders', icon: ShoppingBag },
+  { href: `/dashboard/${slug}/kitchen-view`, label: 'Kitchen View', icon: ChefHat },
+  { href: `/dashboard/${slug}/order-kiosk`, label: 'Order Kiosk', icon: Monitor },
 ];
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
@@ -46,12 +47,52 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { restaurants, currentRestaurant, setCurrentRestaurant } = useRestaurant();
   const location = useLocation();
   const navigate = useNavigate();
+  const { slug } = useParams();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Sync restaurant from URL slug
+  useEffect(() => {
+    if (slug && restaurants.length > 0) {
+      const restaurant = restaurants.find(r => r.slug === slug);
+      if (restaurant && restaurant.id !== currentRestaurant?.id) {
+        setCurrentRestaurant(restaurant);
+      }
+    }
+  }, [slug, restaurants, currentRestaurant, setCurrentRestaurant]);
+
+  // Redirect to slug-based URL if on /dashboard without slug
+  useEffect(() => {
+    if (location.pathname === '/dashboard' && currentRestaurant?.slug) {
+      navigate(`/dashboard/${currentRestaurant.slug}`, { replace: true });
+    }
+  }, [location.pathname, currentRestaurant, navigate]);
 
   const handleSignOut = async () => {
     await signOut();
     navigate('/');
   };
+
+  const handleRestaurantChange = (restaurant: typeof currentRestaurant) => {
+    if (restaurant) {
+      setCurrentRestaurant(restaurant);
+      // Navigate to the same page but with new restaurant slug
+      const currentPath = location.pathname;
+      const pathParts = currentPath.split('/');
+      // Replace old slug with new slug
+      if (pathParts.length >= 3 && pathParts[1] === 'dashboard') {
+        if (pathParts[2] && restaurants.some(r => r.slug === pathParts[2])) {
+          pathParts[2] = restaurant.slug;
+          navigate(pathParts.join('/'));
+        } else {
+          navigate(`/dashboard/${restaurant.slug}`);
+        }
+      } else {
+        navigate(`/dashboard/${restaurant.slug}`);
+      }
+    }
+  };
+
+  const navItems = currentRestaurant ? getNavItems(currentRestaurant.slug) : [];
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -106,7 +147,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 {restaurants.map((restaurant) => (
                   <DropdownMenuItem
                     key={restaurant.id}
-                    onClick={() => setCurrentRestaurant(restaurant)}
+                    onClick={() => handleRestaurantChange(restaurant)}
                     className={cn(
                       currentRestaurant?.id === restaurant.id && "bg-accent"
                     )}
@@ -126,7 +167,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           {/* Navigation */}
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
             {navItems.map((item) => {
-              const isActive = location.pathname === item.href;
+              const isActive = location.pathname === item.href || 
+                (item.label === 'Dashboard' && location.pathname === `/dashboard/${currentRestaurant?.slug}`);
               return (
                 <Link
                   key={item.href}
@@ -161,7 +203,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
-                <DropdownMenuItem onClick={() => navigate('/dashboard/settings')}>
+                <DropdownMenuItem onClick={() => navigate(`/dashboard/${currentRestaurant?.slug}/settings`)}>
                   <Settings className="w-4 h-4 mr-2" />
                   Settings
                 </DropdownMenuItem>
