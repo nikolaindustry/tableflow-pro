@@ -39,7 +39,8 @@ import {
   ChevronRight,
   FileText,
   Download,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Printer
 } from 'lucide-react';
 import { format, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO, eachDayOfInterval, eachHourOfInterval, addHours } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -924,9 +925,48 @@ export default function Reports() {
                                 {order.table && ` • Table ${order.table.table_number}`}
                               </p>
                             </div>
-                            <p className="text-lg font-bold text-primary">
-                              ₹{Number(order.total_amount).toLocaleString()}
-                            </p>
+                            <div className="flex items-center gap-3">
+                              <p className="text-lg font-bold text-primary">
+                                ₹{Number(order.total_amount).toLocaleString()}
+                              </p>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => {
+                                  const doc = new jsPDF();
+                                  doc.setFontSize(18);
+                                  doc.text(currentRestaurant?.name || 'Restaurant', 14, 20);
+                                  doc.setFontSize(12);
+                                  doc.text(`Order #${order.id.slice(0, 8).toUpperCase()}`, 14, 30);
+                                  doc.text(`Date: ${format(parseISO(order.created_at), 'PPp')}`, 14, 38);
+                                  if (order.table) {
+                                    doc.text(`Table: ${order.table.table_number}`, 14, 46);
+                                  }
+                                  doc.text(`Status: ${STATUS_CONFIG[order.status].label}`, 14, order.table ? 54 : 46);
+                                  
+                                  const tableData = order.order_items.map(item => [
+                                    item.menu_item?.name || 'Unknown',
+                                    item.quantity.toString(),
+                                    `₹${Number(item.unit_price).toLocaleString()}`,
+                                    `₹${(item.quantity * Number(item.unit_price)).toLocaleString()}`
+                                  ]);
+                                  
+                                  autoTable(doc, {
+                                    startY: order.table ? 60 : 52,
+                                    head: [['Item', 'Qty', 'Price', 'Total']],
+                                    body: tableData,
+                                    foot: [['', '', 'Grand Total', `₹${Number(order.total_amount).toLocaleString()}`]],
+                                    theme: 'striped',
+                                  });
+                                  
+                                  doc.autoPrint();
+                                  window.open(doc.output('bloburl'), '_blank');
+                                }}
+                              >
+                                <Printer className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </div>
                           
                           <div className="flex flex-wrap gap-2">
