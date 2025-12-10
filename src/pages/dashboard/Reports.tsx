@@ -933,34 +933,78 @@ export default function Reports() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8"
+                                title="Print Receipt (Thermal)"
                                 onClick={() => {
-                                  const doc = new jsPDF();
-                                  doc.setFontSize(18);
-                                  doc.text(currentRestaurant?.name || 'Restaurant', 14, 20);
-                                  doc.setFontSize(12);
-                                  doc.text(`Order #${order.id.slice(0, 8).toUpperCase()}`, 14, 30);
-                                  doc.text(`Date: ${format(parseISO(order.created_at), 'PPp')}`, 14, 38);
-                                  if (order.table) {
-                                    doc.text(`Table: ${order.table.table_number}`, 14, 46);
+                                  const printWindow = window.open('', '_blank', 'width=300,height=600');
+                                  if (!printWindow) {
+                                    toast({ title: 'Please allow popups to print', variant: 'destructive' });
+                                    return;
                                   }
-                                  doc.text(`Status: ${STATUS_CONFIG[order.status].label}`, 14, order.table ? 54 : 46);
                                   
-                                  const tableData = order.order_items.map(item => [
-                                    item.menu_item?.name || 'Unknown',
-                                    item.quantity.toString(),
-                                    `₹${Number(item.unit_price).toLocaleString()}`,
-                                    `₹${(item.quantity * Number(item.unit_price)).toLocaleString()}`
-                                  ]);
+                                  const itemsHtml = order.order_items.map(item => `
+                                    <tr>
+                                      <td style="text-align:left;padding:2px 0;">${item.menu_item?.name || 'Unknown'}</td>
+                                      <td style="text-align:center;padding:2px 4px;">${item.quantity}</td>
+                                      <td style="text-align:right;padding:2px 0;">₹${(item.quantity * Number(item.unit_price)).toLocaleString()}</td>
+                                    </tr>
+                                  `).join('');
                                   
-                                  autoTable(doc, {
-                                    startY: order.table ? 60 : 52,
-                                    head: [['Item', 'Qty', 'Price', 'Total']],
-                                    body: tableData,
-                                    foot: [['', '', 'Grand Total', `₹${Number(order.total_amount).toLocaleString()}`]],
-                                    theme: 'striped',
-                                  });
-                                  
-                                  doc.save(`order-${order.id.slice(0, 8).toUpperCase()}.pdf`);
+                                  printWindow.document.write(`
+                                    <!DOCTYPE html>
+                                    <html>
+                                    <head>
+                                      <title>Receipt</title>
+                                      <style>
+                                        * { margin: 0; padding: 0; box-sizing: border-box; }
+                                        body { font-family: 'Courier New', monospace; font-size: 12px; width: 80mm; padding: 5mm; }
+                                        .header { text-align: center; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 10px; }
+                                        .header h1 { font-size: 16px; margin-bottom: 5px; }
+                                        .info { margin-bottom: 10px; }
+                                        .info p { margin: 2px 0; }
+                                        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+                                        .divider { border-top: 1px dashed #000; margin: 10px 0; }
+                                        .total { font-weight: bold; font-size: 14px; text-align: right; }
+                                        .footer { text-align: center; margin-top: 15px; font-size: 10px; }
+                                        @media print { body { width: 80mm; } }
+                                      </style>
+                                    </head>
+                                    <body>
+                                      <div class="header">
+                                        <h1>${currentRestaurant?.name || 'Restaurant'}</h1>
+                                        ${currentRestaurant?.address ? `<p>${currentRestaurant.address}</p>` : ''}
+                                        ${currentRestaurant?.phone ? `<p>Tel: ${currentRestaurant.phone}</p>` : ''}
+                                      </div>
+                                      <div class="info">
+                                        <p><strong>Order #${order.id.slice(0, 8).toUpperCase()}</strong></p>
+                                        <p>Date: ${format(parseISO(order.created_at), 'dd/MM/yyyy HH:mm')}</p>
+                                        ${order.table ? `<p>Table: ${order.table.table_number}</p>` : ''}
+                                      </div>
+                                      <div class="divider"></div>
+                                      <table>
+                                        <thead>
+                                          <tr>
+                                            <th style="text-align:left;">Item</th>
+                                            <th style="text-align:center;">Qty</th>
+                                            <th style="text-align:right;">Amt</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>${itemsHtml}</tbody>
+                                      </table>
+                                      <div class="divider"></div>
+                                      <p class="total">TOTAL: ₹${Number(order.total_amount).toLocaleString()}</p>
+                                      <div class="footer">
+                                        <p>Thank you for dining with us!</p>
+                                        ${currentRestaurant?.gstin ? `<p>GSTIN: ${currentRestaurant.gstin}</p>` : ''}
+                                      </div>
+                                    </body>
+                                    </html>
+                                  `);
+                                  printWindow.document.close();
+                                  printWindow.focus();
+                                  setTimeout(() => {
+                                    printWindow.print();
+                                    printWindow.close();
+                                  }, 250);
                                 }}
                               >
                                 <Printer className="w-4 h-4" />
