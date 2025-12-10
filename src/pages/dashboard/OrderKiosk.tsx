@@ -1061,7 +1061,7 @@ export default function OrderKiosk() {
 
         {/* Right Side - Cart (only when table selected, hidden on mobile) */}
         {selectedTable && !isMobile && (
-          <div className="w-[340px] lg:w-[400px] border-l bg-card flex flex-col overflow-hidden">
+          <div className="w-[380px] lg:w-[440px] xl:w-[480px] border-l bg-card flex flex-col overflow-hidden">
             <div className="p-4 border-b flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <ShoppingCart className="w-5 h-5" />
@@ -1146,24 +1146,22 @@ export default function OrderKiosk() {
                           return (
                             <div key={`${item.menuItem.id}-${item.status}`} className="flex items-center gap-2 bg-muted/30 border border-border/50 rounded-lg p-3">
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <p className="font-medium truncate">{item.menuItem.name}</p>
-                                  <Badge 
-                                    variant="outline" 
-                                    className={`text-xs ${
-                                      item.status === 'ready' 
-                                        ? 'border-success text-success bg-success/10' 
-                                        : item.status === 'cooking'
-                                        ? 'border-warning text-warning bg-warning/10'
-                                        : 'border-muted-foreground'
-                                    }`}
-                                  >
-                                    {item.status === 'cooking' && <ChefHat className="w-3 h-3 mr-1" />}
-                                    {item.status === 'ready' && <CheckCircle2 className="w-3 h-3 mr-1" />}
-                                    {item.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
-                                    {item.status}
-                                  </Badge>
-                                </div>
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-xs mb-1 ${
+                                    item.status === 'ready' 
+                                      ? 'border-success text-success bg-success/10' 
+                                      : item.status === 'cooking'
+                                      ? 'border-warning text-warning bg-warning/10'
+                                      : 'border-muted-foreground'
+                                  }`}
+                                >
+                                  {item.status === 'cooking' && <ChefHat className="w-3 h-3 mr-1" />}
+                                  {item.status === 'ready' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                                  {item.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
+                                  {item.status}
+                                </Badge>
+                                <p className="font-medium truncate">{item.menuItem.name}</p>
                                 <p className="text-sm text-muted-foreground">
                                   ₹{item.menuItem.price} each
                                 </p>
@@ -1427,24 +1425,22 @@ export default function OrderKiosk() {
                             return (
                               <div key={`${item.menuItem.id}-${item.status}`} className="flex items-center gap-2 bg-muted/30 border border-border/50 rounded-lg p-3">
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <p className="font-medium truncate">{item.menuItem.name}</p>
-                                    <Badge 
-                                      variant="outline" 
-                                      className={`text-xs ${
-                                        item.status === 'ready' 
-                                          ? 'border-success text-success bg-success/10' 
-                                          : item.status === 'cooking'
-                                          ? 'border-warning text-warning bg-warning/10'
-                                          : 'border-muted-foreground'
-                                      }`}
-                                    >
-                                      {item.status === 'cooking' && <ChefHat className="w-3 h-3 mr-1" />}
-                                      {item.status === 'ready' && <CheckCircle2 className="w-3 h-3 mr-1" />}
-                                      {item.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
-                                      {item.status}
-                                    </Badge>
-                                  </div>
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`text-xs mb-1 ${
+                                      item.status === 'ready' 
+                                        ? 'border-success text-success bg-success/10' 
+                                        : item.status === 'cooking'
+                                        ? 'border-warning text-warning bg-warning/10'
+                                        : 'border-muted-foreground'
+                                    }`}
+                                  >
+                                    {item.status === 'cooking' && <ChefHat className="w-3 h-3 mr-1" />}
+                                    {item.status === 'ready' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                                    {item.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
+                                    {item.status}
+                                  </Badge>
+                                  <p className="font-medium truncate">{item.menuItem.name}</p>
                                   <p className="text-sm text-muted-foreground">
                                     ₹{item.menuItem.price} each
                                   </p>
