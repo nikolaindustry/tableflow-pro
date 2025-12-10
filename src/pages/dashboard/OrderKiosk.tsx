@@ -1144,7 +1144,7 @@ export default function OrderKiosk() {
                           const isCooking = item.status === 'cooking';
                           
                           return (
-                            <div key={`${item.menuItem.id}-${item.status}`} className="flex items-center gap-3 bg-muted/30 border border-border/50 rounded-lg p-3">
+                            <div key={`${item.menuItem.id}-${item.status}`} className="flex items-center gap-2 bg-muted/30 border border-border/50 rounded-lg p-3">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                   <p className="font-medium truncate">{item.menuItem.name}</p>
@@ -1168,7 +1168,7 @@ export default function OrderKiosk() {
                                   ₹{item.menuItem.price} each
                                 </p>
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1 shrink-0">
                                 {/* Pending items: allow direct quantity edit and cancel */}
                                 {isPending && orderInfo && (
                                   <>
@@ -1221,7 +1221,7 @@ export default function OrderKiosk() {
                                     <span className="w-8 text-center font-medium text-muted-foreground">x{item.quantity}</span>
                                   </>
                                 )}
-                                <span className="font-medium min-w-[60px] text-right">₹{item.menuItem.price * item.quantity}</span>
+                                <span className="font-medium w-14 text-right shrink-0">₹{item.menuItem.price * item.quantity}</span>
                               </div>
                             </div>
                           );
@@ -1425,7 +1425,7 @@ export default function OrderKiosk() {
                             const isCooking = item.status === 'cooking';
                             
                             return (
-                              <div key={`${item.menuItem.id}-${item.status}`} className="flex items-center gap-3 bg-muted/30 border border-border/50 rounded-lg p-3">
+                              <div key={`${item.menuItem.id}-${item.status}`} className="flex items-center gap-2 bg-muted/30 border border-border/50 rounded-lg p-3">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2">
                                     <p className="font-medium truncate">{item.menuItem.name}</p>
@@ -1449,7 +1449,7 @@ export default function OrderKiosk() {
                                     ₹{item.menuItem.price} each
                                   </p>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1 shrink-0">
                                   {isPending && orderInfo && (
                                     <>
                                       <Button
@@ -1497,7 +1497,7 @@ export default function OrderKiosk() {
                                   {item.status === 'ready' && (
                                     <span className="w-8 text-center font-medium text-muted-foreground">x{item.quantity}</span>
                                   )}
-                                  <span className="font-medium min-w-[60px] text-right">₹{item.menuItem.price * item.quantity}</span>
+                                  <span className="font-medium w-14 text-right shrink-0">₹{item.menuItem.price * item.quantity}</span>
                                 </div>
                               </div>
                             );
