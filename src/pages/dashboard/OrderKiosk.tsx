@@ -1061,7 +1061,7 @@ export default function OrderKiosk() {
 
         {/* Right Side - Cart (only when table selected, hidden on mobile) */}
         {selectedTable && !isMobile && (
-          <div className="w-80 lg:w-96 border-l bg-card flex flex-col overflow-hidden">
+          <div className="w-[340px] lg:w-[400px] border-l bg-card flex flex-col overflow-hidden">
             <div className="p-4 border-b flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <ShoppingCart className="w-5 h-5" />
@@ -1132,13 +1132,13 @@ export default function OrderKiosk() {
                 ) : (
                   <>
                     {/* Existing Order Items (items with status) */}
-                    {cart.filter(item => item.status).length > 0 && (
+                    {cart.filter(item => item.status && item.status !== 'cancelled').length > 0 && (
                       <div className="space-y-3">
                         <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                           <Receipt className="w-4 h-4" />
                           <span>Existing Order</span>
                         </div>
-                        {cart.filter(item => item.status).map((item) => {
+                        {cart.filter(item => item.status && item.status !== 'cancelled').map((item) => {
                           const orderInfo = findOrderItemId(item.menuItem.id, item.status || '');
                           const isPending = item.status === 'pending';
                           const isCooking = item.status === 'cooking';
@@ -1230,7 +1230,7 @@ export default function OrderKiosk() {
                     )}
 
                     {/* Separator between existing and new items */}
-                    {cart.filter(item => item.status).length > 0 && cart.filter(item => !item.status).length > 0 && (
+                    {cart.filter(item => item.status && item.status !== 'cancelled').length > 0 && cart.filter(item => !item.status).length > 0 && (
                       <div className="relative py-2">
                         <Separator />
                         <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
@@ -1413,13 +1413,13 @@ export default function OrderKiosk() {
                   ) : (
                     <>
                       {/* Existing Order Items (items with status) */}
-                      {cart.filter(item => item.status).length > 0 && (
+                      {cart.filter(item => item.status && item.status !== 'cancelled').length > 0 && (
                         <div className="space-y-3">
                           <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                             <Receipt className="w-4 h-4" />
                             <span>Existing Order</span>
                           </div>
-                          {cart.filter(item => item.status).map((item) => {
+                          {cart.filter(item => item.status && item.status !== 'cancelled').map((item) => {
                             const orderInfo = findOrderItemId(item.menuItem.id, item.status || '');
                             const isPending = item.status === 'pending';
                             const isCooking = item.status === 'cooking';
@@ -1506,7 +1506,7 @@ export default function OrderKiosk() {
                       )}
 
                       {/* Separator between existing and new items */}
-                      {cart.filter(item => item.status).length > 0 && cart.filter(item => !item.status).length > 0 && (
+                      {cart.filter(item => item.status && item.status !== 'cancelled').length > 0 && cart.filter(item => !item.status).length > 0 && (
                         <div className="relative py-2">
                           <Separator />
                           <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
