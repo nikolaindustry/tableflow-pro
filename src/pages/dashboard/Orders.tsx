@@ -412,18 +412,10 @@ export default function Orders() {
                   Mark Ready
                 </Button>
               )}
-              {order.status === 'ready' && order.table && (
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => {
-                    // Navigate to Order Kiosk for billing - billing must go through kiosk
-                    const slug = window.location.pathname.split('/')[2];
-                    window.location.href = `/dashboard/${slug}/order-kiosk`;
-                  }}
-                >
+              {order.status === 'ready' && (
+                <Button size="sm" onClick={() => handleUpdateOrderStatus(order.id, 'served')}>
                   <CheckCircle className="w-4 h-4 mr-1" />
-                  Bill & Serve (via Kiosk)
+                  Mark Served
                 </Button>
               )}
             </div>
