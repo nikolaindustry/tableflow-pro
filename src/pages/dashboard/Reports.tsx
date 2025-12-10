@@ -960,8 +960,7 @@ export default function Reports() {
                                     theme: 'striped',
                                   });
                                   
-                                  doc.autoPrint();
-                                  window.open(doc.output('bloburl'), '_blank');
+                                  doc.save(`order-${order.id.slice(0, 8).toUpperCase()}.pdf`);
                                 }}
                               >
                                 <Printer className="w-4 h-4" />
