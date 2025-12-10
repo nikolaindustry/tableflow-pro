@@ -524,107 +524,58 @@ export default function OrderKiosk() {
   }, [menuItems, selectedCategoryId, searchQuery]);
 
   const submitOrder = async () => {
-    if (!selectedTable || !currentRestaurant || cart.length === 0) return;
+    if (!selectedTable || !currentRestaurant) return;
+    
+    // Only submit NEW items (items without a status)
+    const newItems = cart.filter(item => !item.status);
+    
+    if (newItems.length === 0) {
+      toast.info('No new items to send to kitchen');
+      return;
+    }
     
     setSubmitting(true);
     try {
-      if (activeOrder) {
-        // Update existing order
-        const existingItemIds = activeOrder.items.map(i => i.menu_item_id);
-        const cartItemIds = cart.map(i => i.menuItem.id);
-        
-        // Items to add (in cart but not in existing order)
-        const itemsToAdd = cart.filter(item => !existingItemIds.includes(item.menuItem.id));
-        
-        // Items to remove (in existing order but not in cart)
-        const itemsToRemove = activeOrder.items.filter(item => !cartItemIds.includes(item.menu_item_id));
-        
-        // Items to update quantity (in both, but quantity changed)
-        const itemsToUpdate = cart.filter(cartItem => {
-          const existingItem = activeOrder.items.find(i => i.menu_item_id === cartItem.menuItem.id);
-          return existingItem && existingItem.quantity !== cartItem.quantity;
-        });
-
-        // Remove items
-        if (itemsToRemove.length > 0) {
-          const { error } = await supabase
-            .from('order_items')
-            .delete()
-            .in('id', itemsToRemove.map(i => i.id));
-          if (error) throw error;
-        }
-
-        // Add new items
-        if (itemsToAdd.length > 0) {
-          const newItems = itemsToAdd.map(item => ({
-            order_id: activeOrder.id,
-            menu_item_id: item.menuItem.id,
-            kitchen_id: item.menuItem.kitchen_id,
-            quantity: item.quantity,
-            unit_price: item.menuItem.price,
-            notes: item.notes || null,
-            status: 'pending' as const
-          }));
-          const { error } = await supabase.from('order_items').insert(newItems);
-          if (error) throw error;
-        }
-
-        // Update quantities
-        for (const cartItem of itemsToUpdate) {
-          const existingItem = activeOrder.items.find(i => i.menu_item_id === cartItem.menuItem.id);
-          if (existingItem) {
-            const { error } = await supabase
-              .from('order_items')
-              .update({ quantity: cartItem.quantity, status: 'pending' })
-              .eq('id', existingItem.id);
-            if (error) throw error;
-          }
-        }
-
-        // Update order total
-        const { error: orderError } = await supabase
-          .from('orders')
-          .update({ total_amount: cartTotal, status: 'pending' })
-          .eq('id', activeOrder.id);
-        if (orderError) throw orderError;
-
-        toast.success('Order updated!');
-      } else {
-        // Create new order
-        const { data: order, error: orderError } = await supabase
-          .from('orders')
-          .insert({
-            restaurant_id: currentRestaurant.id,
-            table_id: selectedTable.id,
-            total_amount: cartTotal,
-            status: 'pending'
-          })
-          .select()
-          .single();
-
-        if (orderError) throw orderError;
-
-        // Create order items
-        const orderItems = cart.map(item => ({
-          order_id: order.id,
-          menu_item_id: item.menuItem.id,
-          kitchen_id: item.menuItem.kitchen_id,
-          quantity: item.quantity,
-          unit_price: item.menuItem.price,
-          notes: item.notes || null,
-          status: 'pending' as const
-        }));
-
-        const { error: itemsError } = await supabase
-          .from('order_items')
-          .insert(orderItems);
-
-        if (itemsError) throw itemsError;
-
-        toast.success('Order sent to kitchen!');
-      }
+      // Always create a new order for new items
+      // This ensures proper tracking and billing for items ordered after previous orders were served
+      const newItemsTotal = newItems.reduce((sum, item) => sum + item.menuItem.price * item.quantity, 0);
       
-      setCart([]);
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          restaurant_id: currentRestaurant.id,
+          table_id: selectedTable.id,
+          total_amount: newItemsTotal,
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+
+      // Create order items only for new items
+      const orderItems = newItems.map(item => ({
+        order_id: order.id,
+        menu_item_id: item.menuItem.id,
+        kitchen_id: item.menuItem.kitchen_id,
+        quantity: item.quantity,
+        unit_price: item.menuItem.price,
+        notes: item.notes || null,
+        status: 'pending' as const
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+
+      if (itemsError) throw itemsError;
+
+      toast.success('Order sent to kitchen!');
+      
+      // Clear only new items from cart, keep existing order items
+      setCart(prev => prev.filter(item => item.status));
+      
+      // Refresh active order to include the new order
       fetchActiveOrder(selectedTable.id);
     } catch (error: any) {
       toast.error(error.message || 'Failed to submit order');
