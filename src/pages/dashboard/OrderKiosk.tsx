@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { 
   Users, 
@@ -135,6 +136,8 @@ export default function OrderKiosk() {
   const [showBillDialog, setShowBillDialog] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [showMobileCart, setShowMobileCart] = useState(false);
+  const [cancelDialogItem, setCancelDialogItem] = useState<{ item: CartItem; orderId: string; itemId: string } | null>(null);
+  const [cancellingItem, setCancellingItem] = useState(false);
   const isMobile = useIsMobile();
 
   const fetchData = async () => {
@@ -486,6 +489,81 @@ export default function OrderKiosk() {
   const removeFromCart = (menuItemId: string) => {
     // Only remove NEW items (without status)
     setCart(prev => prev.filter(item => !(item.menuItem.id === menuItemId && !item.status)));
+  };
+
+  // Cancel/modify existing order items
+  const cancelOrderItem = async (orderId: string, itemId: string, menuItemId: string, currentQuantity: number, reduceBy?: number) => {
+    setCancellingItem(true);
+    try {
+      if (reduceBy && reduceBy < currentQuantity) {
+        // Reduce quantity
+        const newQuantity = currentQuantity - reduceBy;
+        const { error } = await supabase
+          .from('order_items')
+          .update({ quantity: newQuantity })
+          .eq('id', itemId);
+        
+        if (error) throw error;
+        
+        // Update cart
+        setCart(prev => prev.map(item => 
+          item.menuItem.id === menuItemId && item.status
+            ? { ...item, quantity: newQuantity }
+            : item
+        ));
+        
+        // Update active order
+        setActiveOrder(prev => {
+          if (!prev) return null;
+          const updatedItems = prev.items.map(item =>
+            item.id === itemId ? { ...item, quantity: newQuantity } : item
+          );
+          const newTotal = updatedItems.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
+          return { ...prev, items: updatedItems, total_amount: newTotal };
+        });
+        
+        toast.success('Item quantity updated');
+      } else {
+        // Cancel entire item (set status to cancelled)
+        const { error } = await supabase
+          .from('order_items')
+          .update({ status: 'cancelled' })
+          .eq('id', itemId);
+        
+        if (error) throw error;
+        
+        // Remove from cart
+        setCart(prev => prev.filter(item => !(item.menuItem.id === menuItemId && item.status)));
+        
+        // Remove from active order and recalculate total
+        setActiveOrder(prev => {
+          if (!prev) return null;
+          const updatedItems = prev.items.filter(item => item.id !== itemId);
+          const newTotal = updatedItems.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
+          return { ...prev, items: updatedItems, total_amount: newTotal };
+        });
+        
+        toast.success('Item cancelled');
+      }
+      
+      setCancelDialogItem(null);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to cancel item');
+    } finally {
+      setCancellingItem(false);
+    }
+  };
+
+  // Find order item ID for a cart item
+  const findOrderItemId = (menuItemId: string, status: string): { orderId: string; itemId: string } | null => {
+    if (!activeOrder) return null;
+    const orderItem = activeOrder.items.find(
+      item => item.menu_item_id === menuItemId && item.status === status
+    );
+    if (orderItem) {
+      return { orderId: (orderItem as any).order_id || activeOrder.id, itemId: orderItem.id };
+    }
+    return null;
   };
 
   const updateQuantity = (menuItemId: string, delta: number) => {
@@ -1060,37 +1138,94 @@ export default function OrderKiosk() {
                           <Receipt className="w-4 h-4" />
                           <span>Existing Order</span>
                         </div>
-                        {cart.filter(item => item.status).map((item) => (
-                          <div key={item.menuItem.id} className="flex items-center gap-3 bg-muted/30 border border-border/50 rounded-lg p-3">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium truncate">{item.menuItem.name}</p>
-                                <Badge 
-                                  variant="outline" 
-                                  className={`text-xs ${
-                                    item.status === 'ready' 
-                                      ? 'border-success text-success bg-success/10' 
-                                      : item.status === 'cooking'
-                                      ? 'border-warning text-warning bg-warning/10'
-                                      : 'border-muted-foreground'
-                                  }`}
-                                >
-                                  {item.status === 'cooking' && <ChefHat className="w-3 h-3 mr-1" />}
-                                  {item.status === 'ready' && <CheckCircle2 className="w-3 h-3 mr-1" />}
-                                  {item.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
-                                  {item.status}
-                                </Badge>
+                        {cart.filter(item => item.status).map((item) => {
+                          const orderInfo = findOrderItemId(item.menuItem.id, item.status || '');
+                          const isPending = item.status === 'pending';
+                          const isCooking = item.status === 'cooking';
+                          
+                          return (
+                            <div key={`${item.menuItem.id}-${item.status}`} className="flex items-center gap-3 bg-muted/30 border border-border/50 rounded-lg p-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium truncate">{item.menuItem.name}</p>
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`text-xs ${
+                                      item.status === 'ready' 
+                                        ? 'border-success text-success bg-success/10' 
+                                        : item.status === 'cooking'
+                                        ? 'border-warning text-warning bg-warning/10'
+                                        : 'border-muted-foreground'
+                                    }`}
+                                  >
+                                    {item.status === 'cooking' && <ChefHat className="w-3 h-3 mr-1" />}
+                                    {item.status === 'ready' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                                    {item.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
+                                    {item.status}
+                                  </Badge>
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                  ₹{item.menuItem.price} each
+                                </p>
                               </div>
-                              <p className="text-sm text-muted-foreground">
-                                ₹{item.menuItem.price} each
-                              </p>
+                              <div className="flex items-center gap-2">
+                                {/* Pending items: allow direct quantity edit and cancel */}
+                                {isPending && orderInfo && (
+                                  <>
+                                    <Button
+                                      size="icon"
+                                      variant="outline"
+                                      className="h-7 w-7"
+                                      disabled={item.quantity <= 1}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        cancelOrderItem(orderInfo.orderId, orderInfo.itemId, item.menuItem.id, item.quantity, 1);
+                                      }}
+                                    >
+                                      <Minus className="w-3 h-3" />
+                                    </Button>
+                                    <span className="w-6 text-center font-medium text-muted-foreground">{item.quantity}</span>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        cancelOrderItem(orderInfo.orderId, orderInfo.itemId, item.menuItem.id, item.quantity);
+                                      }}
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </Button>
+                                  </>
+                                )}
+                                {/* Cooking items: show cancel with confirmation */}
+                                {isCooking && orderInfo && (
+                                  <>
+                                    <span className="w-6 text-center font-medium text-muted-foreground">x{item.quantity}</span>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCancelDialogItem({ item, orderId: orderInfo.orderId, itemId: orderInfo.itemId });
+                                      }}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </>
+                                )}
+                                {/* Ready items: display only, no cancel */}
+                                {item.status === 'ready' && (
+                                  <>
+                                    <span className="w-8 text-center font-medium text-muted-foreground">x{item.quantity}</span>
+                                  </>
+                                )}
+                                <span className="font-medium min-w-[60px] text-right">₹{item.menuItem.price * item.quantity}</span>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="w-8 text-center font-medium text-muted-foreground">x{item.quantity}</span>
-                              <span className="font-medium">₹{item.menuItem.price * item.quantity}</span>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
 
@@ -1284,37 +1419,89 @@ export default function OrderKiosk() {
                             <Receipt className="w-4 h-4" />
                             <span>Existing Order</span>
                           </div>
-                          {cart.filter(item => item.status).map((item) => (
-                            <div key={item.menuItem.id} className="flex items-center gap-3 bg-muted/30 border border-border/50 rounded-lg p-3">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <p className="font-medium truncate">{item.menuItem.name}</p>
-                                  <Badge 
-                                    variant="outline" 
-                                    className={`text-xs ${
-                                      item.status === 'ready' 
-                                        ? 'border-success text-success bg-success/10' 
-                                        : item.status === 'cooking'
-                                        ? 'border-warning text-warning bg-warning/10'
-                                        : 'border-muted-foreground'
-                                    }`}
-                                  >
-                                    {item.status === 'cooking' && <ChefHat className="w-3 h-3 mr-1" />}
-                                    {item.status === 'ready' && <CheckCircle2 className="w-3 h-3 mr-1" />}
-                                    {item.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
-                                    {item.status}
-                                  </Badge>
+                          {cart.filter(item => item.status).map((item) => {
+                            const orderInfo = findOrderItemId(item.menuItem.id, item.status || '');
+                            const isPending = item.status === 'pending';
+                            const isCooking = item.status === 'cooking';
+                            
+                            return (
+                              <div key={`${item.menuItem.id}-${item.status}`} className="flex items-center gap-3 bg-muted/30 border border-border/50 rounded-lg p-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium truncate">{item.menuItem.name}</p>
+                                    <Badge 
+                                      variant="outline" 
+                                      className={`text-xs ${
+                                        item.status === 'ready' 
+                                          ? 'border-success text-success bg-success/10' 
+                                          : item.status === 'cooking'
+                                          ? 'border-warning text-warning bg-warning/10'
+                                          : 'border-muted-foreground'
+                                      }`}
+                                    >
+                                      {item.status === 'cooking' && <ChefHat className="w-3 h-3 mr-1" />}
+                                      {item.status === 'ready' && <CheckCircle2 className="w-3 h-3 mr-1" />}
+                                      {item.status === 'pending' && <Clock className="w-3 h-3 mr-1" />}
+                                      {item.status}
+                                    </Badge>
+                                  </div>
+                                  <p className="text-sm text-muted-foreground">
+                                    ₹{item.menuItem.price} each
+                                  </p>
                                 </div>
-                                <p className="text-sm text-muted-foreground">
-                                  ₹{item.menuItem.price} each
-                                </p>
+                                <div className="flex items-center gap-2">
+                                  {isPending && orderInfo && (
+                                    <>
+                                      <Button
+                                        size="icon"
+                                        variant="outline"
+                                        className="h-7 w-7"
+                                        disabled={item.quantity <= 1}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          cancelOrderItem(orderInfo.orderId, orderInfo.itemId, item.menuItem.id, item.quantity, 1);
+                                        }}
+                                      >
+                                        <Minus className="w-3 h-3" />
+                                      </Button>
+                                      <span className="w-6 text-center font-medium text-muted-foreground">{item.quantity}</span>
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          cancelOrderItem(orderInfo.orderId, orderInfo.itemId, item.menuItem.id, item.quantity);
+                                        }}
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </Button>
+                                    </>
+                                  )}
+                                  {isCooking && orderInfo && (
+                                    <>
+                                      <span className="w-6 text-center font-medium text-muted-foreground">x{item.quantity}</span>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setCancelDialogItem({ item, orderId: orderInfo.orderId, itemId: orderInfo.itemId });
+                                        }}
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </>
+                                  )}
+                                  {item.status === 'ready' && (
+                                    <span className="w-8 text-center font-medium text-muted-foreground">x{item.quantity}</span>
+                                  )}
+                                  <span className="font-medium min-w-[60px] text-right">₹{item.menuItem.price * item.quantity}</span>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className="w-8 text-center font-medium text-muted-foreground">x{item.quantity}</span>
-                                <span className="font-medium">₹{item.menuItem.price * item.quantity}</span>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
 
@@ -1520,6 +1707,43 @@ export default function OrderKiosk() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Cancel Cooking Item Confirmation Dialog */}
+      <AlertDialog open={!!cancelDialogItem} onOpenChange={(open) => !open && setCancelDialogItem(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Cooking Item?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {cancelDialogItem && (
+                <>
+                  The kitchen has already started cooking <strong>{cancelDialogItem.item.menuItem.name}</strong> (x{cancelDialogItem.item.quantity}).
+                  <br /><br />
+                  Are you sure you want to cancel this item? This action cannot be undone.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancellingItem}>Keep Item</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={cancellingItem}
+              onClick={() => {
+                if (cancelDialogItem) {
+                  cancelOrderItem(
+                    cancelDialogItem.orderId,
+                    cancelDialogItem.itemId,
+                    cancelDialogItem.item.menuItem.id,
+                    cancelDialogItem.item.quantity
+                  );
+                }
+              }}
+            >
+              {cancellingItem ? 'Cancelling...' : 'Cancel Item'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
