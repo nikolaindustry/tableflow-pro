@@ -413,10 +413,9 @@ export default function Orders() {
                 </Button>
               )}
               {order.status === 'ready' && (
-                <Button size="sm" onClick={() => handleUpdateOrderStatus(order.id, 'served')}>
-                  <CheckCircle className="w-4 h-4 mr-1" />
-                  Mark Served
-                </Button>
+                <p className="text-sm text-muted-foreground italic">
+                  Complete billing via Order Kiosk
+                </p>
               )}
             </div>
           )}
