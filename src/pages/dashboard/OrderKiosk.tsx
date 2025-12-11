@@ -142,7 +142,10 @@ export default function OrderKiosk() {
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [cancelDialogItem, setCancelDialogItem] = useState<{ item: CartItem; orderId: string; itemId: string } | null>(null);
   const [cancellingItem, setCancellingItem] = useState(false);
+  const [printerSelectorOpen, setPrinterSelectorOpen] = useState(false);
   const isMobile = useIsMobile();
+  
+  const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing } = useThermalPrinter();
 
   const fetchData = async () => {
     if (!currentRestaurant) return;
@@ -744,89 +747,36 @@ export default function OrderKiosk() {
     }
   };
 
-  const printBill = () => {
-    if (!selectedTable || !activeOrder || !currentRestaurant) return;
+  const getBillData = useCallback((): BillData | null => {
+    if (!selectedTable || !activeOrder || !currentRestaurant) return null;
+    
+    return {
+      restaurantName: currentRestaurant.name,
+      restaurantAddress: currentRestaurant.address,
+      restaurantPhone: currentRestaurant.phone,
+      restaurantGstin: currentRestaurant.gstin,
+      tableNumber: selectedTable.table_number,
+      items: activeOrder.items.map(item => ({
+        name: item.menu_item?.name || 'Item',
+        quantity: item.quantity,
+        price: item.unit_price,
+      })),
+      total: activeOrder.total_amount,
+    };
+  }, [selectedTable, activeOrder, currentRestaurant]);
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error('Please allow popups to print the bill');
-      return;
+  const handlePrintBill = async (useBluetooth: boolean = false) => {
+    const billData = getBillData();
+    if (!billData) return;
+    
+    try {
+      await printThermal(billData, useBluetooth);
+      if (useBluetooth) {
+        toast.success('Bill printed via Bluetooth');
+      }
+    } catch (error: any) {
+      toast.error(error.message);
     }
-
-    const billDate = new Date().toLocaleString('en-IN', {
-      dateStyle: 'medium',
-      timeStyle: 'short'
-    });
-
-    const itemsHtml = activeOrder.items.map(item => `
-      <tr>
-        <td style="padding: 6px 0;">${item.menu_item?.name || 'Item'}</td>
-        <td style="text-align: center;">${item.quantity}</td>
-        <td style="text-align: right;">₹${item.unit_price.toFixed(2)}</td>
-        <td style="text-align: right;">₹${(item.unit_price * item.quantity).toFixed(2)}</td>
-      </tr>
-    `).join('');
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Bill - ${currentRestaurant.name}</title>
-          <style>
-            body { font-family: 'Courier New', monospace; font-size: 12px; padding: 20px; max-width: 300px; margin: 0 auto; }
-            .header { text-align: center; margin-bottom: 20px; }
-            .header h1 { font-size: 18px; margin: 0 0 5px 0; }
-            .header p { margin: 2px 0; color: #666; font-size: 11px; }
-            table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-            th { border-bottom: 1px dashed #000; padding: 6px 0; text-align: left; font-size: 11px; }
-            th:nth-child(2), th:nth-child(3), th:nth-child(4) { text-align: right; }
-            .total-row { border-top: 1px dashed #000; font-weight: bold; }
-            .total-row td { padding-top: 10px; }
-            .footer { text-align: center; margin-top: 30px; font-size: 11px; }
-            .divider { border-bottom: 1px dashed #000; margin: 15px 0; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>${currentRestaurant.name}</h1>
-            ${currentRestaurant.address ? `<p>${currentRestaurant.address}</p>` : ''}
-            ${currentRestaurant.phone ? `<p>Phone: ${currentRestaurant.phone}</p>` : ''}
-            ${currentRestaurant.gstin ? `<p>GSTIN: ${currentRestaurant.gstin}</p>` : ''}
-          </div>
-          <div class="divider"></div>
-          <p><strong>Table:</strong> ${selectedTable.table_number}</p>
-          <p><strong>Date:</strong> ${billDate}</p>
-          <div class="divider"></div>
-          <table>
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Qty</th>
-                <th>Price</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemsHtml}
-            </tbody>
-          </table>
-          <div class="divider"></div>
-          <table>
-            <tr class="total-row">
-              <td colspan="3"><strong>Grand Total</strong></td>
-              <td style="text-align: right;"><strong>₹${activeOrder.total_amount.toFixed(2)}</strong></td>
-            </tr>
-          </table>
-          <div class="footer">
-            <p>Thank you for dining with us!</p>
-            <p>Please visit again</p>
-          </div>
-        </body>
-      </html>
-    `);
-
-    printWindow.document.close();
-    printWindow.print();
   };
 
   if (!currentRestaurant) {
@@ -1657,10 +1607,21 @@ export default function OrderKiosk() {
 
             {/* Print Options */}
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={printBill}>
+              <Button variant="outline" className="flex-1" onClick={() => handlePrintBill(false)} disabled={printing}>
                 <Printer className="w-4 h-4 mr-2" />
                 Browser Print
               </Button>
+              {isBluetoothAvailable && (
+                <Button 
+                  variant="outline" 
+                  className={`flex-1 ${connectedDevice ? 'border-success text-success' : ''}`}
+                  onClick={() => connectedDevice ? handlePrintBill(true) : setPrinterSelectorOpen(true)}
+                  disabled={printing}
+                >
+                  <Bluetooth className="w-4 h-4 mr-2" />
+                  {connectedDevice ? 'Thermal Print' : 'Connect Printer'}
+                </Button>
+              )}
             </div>
 
             {/* Payment Methods */}
@@ -1742,6 +1703,9 @@ export default function OrderKiosk() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Printer Selector Dialog */}
+      <PrinterSelector open={printerSelectorOpen} onOpenChange={setPrinterSelectorOpen} />
     </div>
   );
 }
