@@ -30,8 +30,12 @@ import {
   CreditCard,
   Banknote,
   Printer,
-  Wallet
+  Wallet,
+  Bluetooth,
 } from 'lucide-react';
+import { useThermalPrinter } from '@/hooks/useThermalPrinter';
+import { PrinterSelector } from '@/components/PrinterSelector';
+import type { BillData } from '@/services/thermalPrinter';
 
 interface Table {
   id: string;
@@ -1651,15 +1655,13 @@ export default function OrderKiosk() {
               </div>
             </div>
 
-            {/* Print Button */}
-            <Button 
-              variant="outline" 
-              className="w-full"
-              onClick={printBill}
-            >
-              <Printer className="w-4 h-4 mr-2" />
-              Print Bill
-            </Button>
+            {/* Print Options */}
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={printBill}>
+                <Printer className="w-4 h-4 mr-2" />
+                Browser Print
+              </Button>
+            </div>
 
             {/* Payment Methods */}
             <div className="space-y-2">
