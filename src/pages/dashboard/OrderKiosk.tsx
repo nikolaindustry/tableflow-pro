@@ -34,6 +34,7 @@ import {
   Bluetooth,
 } from 'lucide-react';
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
+import { TableOccupiedTimer } from '@/components/TableOccupiedTimer';
 import { PrinterSelector } from '@/components/PrinterSelector';
 import type { BillData } from '@/services/thermalPrinter';
 
@@ -143,6 +144,7 @@ export default function OrderKiosk() {
   const [cancelDialogItem, setCancelDialogItem] = useState<{ item: CartItem; orderId: string; itemId: string } | null>(null);
   const [cancellingItem, setCancellingItem] = useState(false);
   const [printerSelectorOpen, setPrinterSelectorOpen] = useState(false);
+  const [tableOccupationTimes, setTableOccupationTimes] = useState<Record<string, string>>({});
   const isMobile = useIsMobile();
   
   const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing } = useThermalPrinter(); // Thermal printer hook
@@ -173,6 +175,31 @@ export default function OrderKiosk() {
       
       if (floorsRes.data && floorsRes.data.length > 0 && !selectedFloorId) {
         setSelectedFloorId(floorsRes.data[0].id);
+      }
+
+      // Fetch occupation times for occupied tables
+      const occupiedTableIds = floorsRes.data
+        ?.flatMap(f => f.tables)
+        ?.filter(t => t.is_occupied)
+        ?.map(t => t.id) || [];
+
+      if (occupiedTableIds.length > 0) {
+        const { data: ordersData } = await supabase
+          .from('orders')
+          .select('table_id, created_at')
+          .in('table_id', occupiedTableIds)
+          .in('status', ['pending', 'cooking', 'ready'])
+          .order('created_at', { ascending: true });
+
+        if (ordersData) {
+          const times: Record<string, string> = {};
+          ordersData.forEach(order => {
+            if (!times[order.table_id]) {
+              times[order.table_id] = order.created_at;
+            }
+          });
+          setTableOccupationTimes(times);
+        }
       }
 
       // Fetch menu items for all categories
@@ -905,14 +932,21 @@ export default function OrderKiosk() {
                                     <span className="text-sm font-medium">{table.capacity} seats</span>
                                   </div>
                                   
-                                  {/* Status badge */}
-                                  <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
-                                    table.is_occupied 
-                                      ? 'bg-destructive/15 text-destructive' 
-                                      : 'bg-success/15 text-success'
-                                  }`}>
-                                    {table.is_occupied ? 'Occupied' : 'Available'}
-                                  </span>
+                                  {/* Status badge or timer */}
+                                  {table.is_occupied ? (
+                                    <div className="flex flex-col items-center gap-1">
+                                      <span className="text-xs font-semibold px-3 py-1 rounded-full bg-destructive/15 text-destructive">
+                                        Occupied
+                                      </span>
+                                      <TableOccupiedTimer 
+                                        occupiedSince={tableOccupationTimes[table.id] || null} 
+                                      />
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs font-semibold px-3 py-1 rounded-full bg-success/15 text-success">
+                                      Available
+                                    </span>
+                                  )}
                                 </div>
                               </button>
                             ))}
