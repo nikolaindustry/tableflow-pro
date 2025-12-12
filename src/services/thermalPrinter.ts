@@ -28,9 +28,29 @@ class ThermalPrinterService {
     return this.isNative;
   }
 
+  async requestBluetoothPermissions(): Promise<boolean> {
+    if (!this.isNative) {
+      return false;
+    }
+
+    try {
+      const result = await CapacitorThermalPrinter.requestPermissions();
+      return result.granted === true;
+    } catch (error) {
+      console.error('Failed to request Bluetooth permissions:', error);
+      return false;
+    }
+  }
+
   async scanDevices(): Promise<PrinterDevice[]> {
     if (!this.isNative) {
       throw new Error('Bluetooth scanning is only available on mobile devices');
+    }
+
+    // Request permissions first
+    const hasPermissions = await this.requestBluetoothPermissions();
+    if (!hasPermissions) {
+      throw new Error('Bluetooth permissions are required to scan for printers');
     }
 
     return new Promise(async (resolve, reject) => {
