@@ -29,6 +29,7 @@ import {
   Monitor,
   BarChart3,
   Users,
+  Database as DatabaseIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Database } from '@/integrations/supabase/types';
@@ -56,6 +57,7 @@ const getNavItems = (slug: string): NavItem[] => [
   { href: `/dashboard/${slug}/order-kiosk`, label: 'Order Kiosk', icon: Monitor, roles: ['owner', 'manager', 'waiter'] },
   { href: `/dashboard/${slug}/reports`, label: 'Reports', icon: BarChart3, roles: ['owner', 'manager'] },
   { href: `/dashboard/${slug}/staff`, label: 'Staff', icon: Users, roles: ['owner', 'manager'] },
+  { href: `/dashboard/${slug}/data`, label: 'Data Manager', icon: DatabaseIcon, roles: ['owner'] },
   { href: `/dashboard/${slug}/settings`, label: 'Settings', icon: SettingsIcon, roles: ['owner'] },
 ];
 

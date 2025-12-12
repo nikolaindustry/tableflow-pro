@@ -19,6 +19,7 @@ import OrderKiosk from "./pages/dashboard/OrderKiosk";
 import Settings from "./pages/dashboard/Settings";
 import Reports from "./pages/dashboard/Reports";
 import Staff from "./pages/dashboard/Staff";
+import DataManager from "./pages/dashboard/DataManager";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -48,6 +49,7 @@ const App = () => (
               <Route path="/dashboard/:slug/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
               <Route path="/dashboard/:slug/staff" element={<ProtectedRoute><Staff /></ProtectedRoute>} />
               <Route path="/dashboard/:slug/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+              <Route path="/dashboard/:slug/data" element={<ProtectedRoute><DataManager /></ProtectedRoute>} />
               
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
