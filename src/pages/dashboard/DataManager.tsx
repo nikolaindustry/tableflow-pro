@@ -42,19 +42,34 @@ import {
   ChevronRight,
   Search,
   Loader2,
+  Plus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type TableName = 'floors' | 'tables' | 'kitchens' | 'menu_categories' | 'menu_items' | 'orders' | 'order_items' | 'staff_members' | 'shifts';
 
+interface ColumnConfig {
+  key: string;
+  label: string;
+  editable?: boolean;
+  insertable?: boolean;
+  type?: 'text' | 'number' | 'select';
+  options?: string[];
+  required?: boolean;
+}
+
 interface TableConfig {
   name: TableName;
   displayName: string;
-  columns: { key: string; label: string; editable?: boolean }[];
+  columns: ColumnConfig[];
   getQuery: (restaurantId: string) => Promise<{ data: any[] | null; error: any }>;
   deleteRow: (id: string) => Promise<{ error: any }>;
   updateRow: (id: string, data: Record<string, any>) => Promise<{ error: any }>;
+  insertRow: (restaurantId: string, data: Record<string, any>) => Promise<{ error: any }>;
 }
+
+// Helper to cast inserts to any to avoid strict Supabase typing
+const insertAs = (table: any) => table.insert as (data: any) => Promise<{ error: any }>;
 
 const tableConfigs: TableConfig[] = [
   {
@@ -62,23 +77,24 @@ const tableConfigs: TableConfig[] = [
     displayName: 'Floors',
     columns: [
       { key: 'id', label: 'ID' },
-      { key: 'name', label: 'Name', editable: true },
-      { key: 'floor_number', label: 'Floor Number', editable: true },
+      { key: 'name', label: 'Name', editable: true, insertable: true, required: true },
+      { key: 'floor_number', label: 'Floor Number', editable: true, insertable: true, type: 'number', required: true },
       { key: 'created_at', label: 'Created At' },
     ],
     getQuery: async (restaurantId) => supabase.from('floors').select('*').eq('restaurant_id', restaurantId).order('floor_number'),
     deleteRow: async (id) => supabase.from('floors').delete().eq('id', id),
     updateRow: async (id, data) => supabase.from('floors').update(data).eq('id', id),
+    insertRow: async (restaurantId, data) => supabase.from('floors').insert({ ...data, restaurant_id: restaurantId } as any),
   },
   {
     name: 'tables',
     displayName: 'Tables',
     columns: [
       { key: 'id', label: 'ID' },
-      { key: 'table_number', label: 'Table Number', editable: true },
-      { key: 'capacity', label: 'Capacity', editable: true },
+      { key: 'table_number', label: 'Table Number', editable: true, insertable: true, required: true },
+      { key: 'capacity', label: 'Capacity', editable: true, insertable: true, type: 'number', required: true },
       { key: 'is_occupied', label: 'Occupied' },
-      { key: 'floor_id', label: 'Floor ID' },
+      { key: 'floor_id', label: 'Floor ID', insertable: true, required: true },
       { key: 'created_at', label: 'Created At' },
     ],
     getQuery: async (restaurantId) => {
@@ -88,48 +104,51 @@ const tableConfigs: TableConfig[] = [
     },
     deleteRow: async (id) => supabase.from('tables').delete().eq('id', id),
     updateRow: async (id, data) => supabase.from('tables').update(data).eq('id', id),
+    insertRow: async (_restaurantId, data) => supabase.from('tables').insert(data as any),
   },
   {
     name: 'kitchens',
     displayName: 'Kitchens',
     columns: [
       { key: 'id', label: 'ID' },
-      { key: 'name', label: 'Name', editable: true },
-      { key: 'description', label: 'Description', editable: true },
+      { key: 'name', label: 'Name', editable: true, insertable: true, required: true },
+      { key: 'description', label: 'Description', editable: true, insertable: true },
       { key: 'is_active', label: 'Active' },
       { key: 'created_at', label: 'Created At' },
     ],
     getQuery: async (restaurantId) => supabase.from('kitchens').select('*').eq('restaurant_id', restaurantId).order('name'),
     deleteRow: async (id) => supabase.from('kitchens').delete().eq('id', id),
     updateRow: async (id, data) => supabase.from('kitchens').update(data).eq('id', id),
+    insertRow: async (restaurantId, data) => supabase.from('kitchens').insert({ ...data, restaurant_id: restaurantId } as any),
   },
   {
     name: 'menu_categories',
     displayName: 'Menu Categories',
     columns: [
       { key: 'id', label: 'ID' },
-      { key: 'name', label: 'Name', editable: true },
-      { key: 'description', label: 'Description', editable: true },
-      { key: 'sort_order', label: 'Sort Order', editable: true },
+      { key: 'name', label: 'Name', editable: true, insertable: true, required: true },
+      { key: 'description', label: 'Description', editable: true, insertable: true },
+      { key: 'sort_order', label: 'Sort Order', editable: true, insertable: true, type: 'number' },
       { key: 'is_active', label: 'Active' },
       { key: 'created_at', label: 'Created At' },
     ],
     getQuery: async (restaurantId) => supabase.from('menu_categories').select('*').eq('restaurant_id', restaurantId).order('sort_order'),
     deleteRow: async (id) => supabase.from('menu_categories').delete().eq('id', id),
     updateRow: async (id, data) => supabase.from('menu_categories').update(data).eq('id', id),
+    insertRow: async (restaurantId, data) => supabase.from('menu_categories').insert({ ...data, restaurant_id: restaurantId } as any),
   },
   {
     name: 'menu_items',
     displayName: 'Menu Items',
     columns: [
       { key: 'id', label: 'ID' },
-      { key: 'name', label: 'Name', editable: true },
-      { key: 'description', label: 'Description', editable: true },
-      { key: 'price', label: 'Price', editable: true },
-      { key: 'food_type', label: 'Food Type', editable: true },
-      { key: 'spice_level', label: 'Spice Level', editable: true },
+      { key: 'name', label: 'Name', editable: true, insertable: true, required: true },
+      { key: 'description', label: 'Description', editable: true, insertable: true },
+      { key: 'price', label: 'Price', editable: true, insertable: true, type: 'number', required: true },
+      { key: 'food_type', label: 'Food Type', editable: true, insertable: true, type: 'select', options: ['veg', 'non_veg', 'egg'] },
+      { key: 'spice_level', label: 'Spice Level', editable: true, insertable: true, type: 'select', options: ['mild', 'medium', 'spicy', 'extra_spicy'] },
       { key: 'is_available', label: 'Available' },
-      { key: 'category_id', label: 'Category ID' },
+      { key: 'category_id', label: 'Category ID', insertable: true, required: true },
     ],
     getQuery: async (restaurantId) => {
       const { data: categories } = await supabase.from('menu_categories').select('id').eq('restaurant_id', restaurantId);
@@ -138,34 +157,36 @@ const tableConfigs: TableConfig[] = [
     },
     deleteRow: async (id) => supabase.from('menu_items').delete().eq('id', id),
     updateRow: async (id, data) => supabase.from('menu_items').update(data).eq('id', id),
+    insertRow: async (_restaurantId, data) => supabase.from('menu_items').insert(data as any),
   },
   {
     name: 'orders',
     displayName: 'Orders',
     columns: [
       { key: 'id', label: 'ID' },
-      { key: 'status', label: 'Status', editable: true },
-      { key: 'total_amount', label: 'Total Amount' },
-      { key: 'table_id', label: 'Table ID' },
-      { key: 'notes', label: 'Notes', editable: true },
+      { key: 'status', label: 'Status', editable: true, insertable: true, type: 'select', options: ['pending', 'cooking', 'ready', 'served', 'cancelled'] },
+      { key: 'total_amount', label: 'Total Amount', insertable: true, type: 'number' },
+      { key: 'table_id', label: 'Table ID', insertable: true },
+      { key: 'notes', label: 'Notes', editable: true, insertable: true },
       { key: 'created_at', label: 'Created At' },
       { key: 'updated_at', label: 'Updated At' },
     ],
     getQuery: async (restaurantId) => supabase.from('orders').select('*').eq('restaurant_id', restaurantId).order('created_at', { ascending: false }),
     deleteRow: async (id) => supabase.from('orders').delete().eq('id', id),
     updateRow: async (id, data) => supabase.from('orders').update(data).eq('id', id),
+    insertRow: async (restaurantId, data) => supabase.from('orders').insert({ ...data, restaurant_id: restaurantId } as any),
   },
   {
     name: 'order_items',
     displayName: 'Order Items',
     columns: [
       { key: 'id', label: 'ID' },
-      { key: 'order_id', label: 'Order ID' },
-      { key: 'menu_item_id', label: 'Menu Item ID' },
-      { key: 'quantity', label: 'Quantity', editable: true },
-      { key: 'unit_price', label: 'Unit Price' },
-      { key: 'status', label: 'Status', editable: true },
-      { key: 'notes', label: 'Notes', editable: true },
+      { key: 'order_id', label: 'Order ID', insertable: true, required: true },
+      { key: 'menu_item_id', label: 'Menu Item ID', insertable: true, required: true },
+      { key: 'quantity', label: 'Quantity', editable: true, insertable: true, type: 'number', required: true },
+      { key: 'unit_price', label: 'Unit Price', insertable: true, type: 'number', required: true },
+      { key: 'status', label: 'Status', editable: true, insertable: true, type: 'select', options: ['pending', 'cooking', 'ready', 'served', 'cancelled'] },
+      { key: 'notes', label: 'Notes', editable: true, insertable: true },
       { key: 'created_at', label: 'Created At' },
     ],
     getQuery: async (restaurantId) => {
@@ -175,37 +196,40 @@ const tableConfigs: TableConfig[] = [
     },
     deleteRow: async (id) => supabase.from('order_items').delete().eq('id', id),
     updateRow: async (id, data) => supabase.from('order_items').update(data).eq('id', id),
+    insertRow: async (_restaurantId, data) => supabase.from('order_items').insert(data as any),
   },
   {
     name: 'staff_members',
     displayName: 'Staff Members',
     columns: [
       { key: 'id', label: 'ID' },
-      { key: 'full_name', label: 'Full Name', editable: true },
-      { key: 'email', label: 'Email' },
-      { key: 'phone', label: 'Phone', editable: true },
-      { key: 'role', label: 'Role', editable: true },
+      { key: 'full_name', label: 'Full Name', editable: true, insertable: true, required: true },
+      { key: 'email', label: 'Email', insertable: true, required: true },
+      { key: 'phone', label: 'Phone', editable: true, insertable: true },
+      { key: 'role', label: 'Role', editable: true, insertable: true, type: 'select', options: ['owner', 'manager', 'waiter', 'chef'], required: true },
       { key: 'is_active', label: 'Active' },
       { key: 'joined_at', label: 'Joined At' },
     ],
     getQuery: async (restaurantId) => supabase.from('staff_members').select('*').eq('restaurant_id', restaurantId).order('role'),
     deleteRow: async (id) => supabase.from('staff_members').delete().eq('id', id),
     updateRow: async (id, data) => supabase.from('staff_members').update(data).eq('id', id),
+    insertRow: async (restaurantId, data) => supabase.from('staff_members').insert({ ...data, restaurant_id: restaurantId } as any),
   },
   {
     name: 'shifts',
     displayName: 'Shifts',
     columns: [
       { key: 'id', label: 'ID' },
-      { key: 'staff_member_id', label: 'Staff Member ID' },
-      { key: 'shift_date', label: 'Shift Date', editable: true },
-      { key: 'start_time', label: 'Start Time', editable: true },
-      { key: 'end_time', label: 'End Time', editable: true },
-      { key: 'notes', label: 'Notes', editable: true },
+      { key: 'staff_member_id', label: 'Staff Member ID', insertable: true, required: true },
+      { key: 'shift_date', label: 'Shift Date', editable: true, insertable: true, required: true },
+      { key: 'start_time', label: 'Start Time', editable: true, insertable: true, required: true },
+      { key: 'end_time', label: 'End Time', editable: true, insertable: true, required: true },
+      { key: 'notes', label: 'Notes', editable: true, insertable: true },
     ],
     getQuery: async (restaurantId) => supabase.from('shifts').select('*').eq('restaurant_id', restaurantId).order('shift_date', { ascending: false }),
     deleteRow: async (id) => supabase.from('shifts').delete().eq('id', id),
     updateRow: async (id, data) => supabase.from('shifts').update(data).eq('id', id),
+    insertRow: async (restaurantId, data) => supabase.from('shifts').insert({ ...data, restaurant_id: restaurantId } as any),
   },
 ];
 
@@ -220,6 +244,9 @@ export default function DataManager() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showInsertDialog, setShowInsertDialog] = useState(false);
+  const [insertFormData, setInsertFormData] = useState<Record<string, any>>({});
+  const [inserting, setInserting] = useState(false);
 
   const fetchData = async () => {
     if (!currentRestaurant) return;
@@ -281,6 +308,52 @@ export default function DataManager() {
       toast.error(error.message || 'Failed to delete row');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleOpenInsert = () => {
+    const formData: Record<string, any> = {};
+    selectedTable.columns.forEach(col => {
+      if (col.insertable) {
+        formData[col.key] = '';
+      }
+    });
+    setInsertFormData(formData);
+    setShowInsertDialog(true);
+  };
+
+  const handleInsert = async () => {
+    if (!currentRestaurant) return;
+    
+    // Validate required fields
+    const missingFields = selectedTable.columns
+      .filter(col => col.insertable && col.required && !insertFormData[col.key]?.toString().trim())
+      .map(col => col.label);
+    
+    if (missingFields.length > 0) {
+      toast.error(`Please fill in: ${missingFields.join(', ')}`);
+      return;
+    }
+    
+    setInserting(true);
+    try {
+      // Convert number fields
+      const processedData = { ...insertFormData };
+      selectedTable.columns.forEach(col => {
+        if (col.type === 'number' && processedData[col.key]) {
+          processedData[col.key] = Number(processedData[col.key]);
+        }
+      });
+      
+      const { error } = await selectedTable.insertRow(currentRestaurant.id, processedData);
+      if (error) throw error;
+      toast.success('Row inserted successfully');
+      setShowInsertDialog(false);
+      fetchData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to insert row');
+    } finally {
+      setInserting(false);
     }
   };
 
@@ -356,6 +429,10 @@ export default function DataManager() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg">{selectedTable.displayName}</CardTitle>
               <div className="flex items-center gap-2">
+                <Button onClick={handleOpenInsert} size="sm">
+                  <Plus className="w-4 h-4 mr-1" />
+                  Add Row
+                </Button>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
@@ -487,6 +564,51 @@ export default function DataManager() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Insert Dialog */}
+      <Dialog open={showInsertDialog} onOpenChange={setShowInsertDialog}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add New Row to {selectedTable.displayName}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {selectedTable.columns.filter(col => col.insertable).map((col) => (
+              <div key={col.key} className="grid gap-2">
+                <label className="text-sm font-medium">
+                  {col.label}
+                  {col.required && <span className="text-destructive ml-1">*</span>}
+                </label>
+                {col.type === 'select' && col.options ? (
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={insertFormData[col.key] ?? ''}
+                    onChange={(e) => setInsertFormData(prev => ({ ...prev, [col.key]: e.target.value }))}
+                  >
+                    <option value="">Select {col.label.toLowerCase()}</option>
+                    {col.options.map(opt => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    type={col.type === 'number' ? 'number' : 'text'}
+                    value={insertFormData[col.key] ?? ''}
+                    onChange={(e) => setInsertFormData(prev => ({ ...prev, [col.key]: e.target.value }))}
+                    placeholder={`Enter ${col.label.toLowerCase()}`}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowInsertDialog(false)}>Cancel</Button>
+            <Button onClick={handleInsert} disabled={inserting}>
+              {inserting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+              Insert Row
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
