@@ -20,6 +20,7 @@ import Settings from "./pages/dashboard/Settings";
 import Reports from "./pages/dashboard/Reports";
 import Staff from "./pages/dashboard/Staff";
 import DataManager from "./pages/dashboard/DataManager";
+import Expenses from "./pages/dashboard/Expenses";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ const App = () => (
               <Route path="/dashboard/:slug/kitchen-view" element={<ProtectedRoute><KitchenView /></ProtectedRoute>} />
               <Route path="/dashboard/:slug/order-kiosk" element={<ProtectedRoute><OrderKiosk /></ProtectedRoute>} />
               <Route path="/dashboard/:slug/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+              <Route path="/dashboard/:slug/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
               <Route path="/dashboard/:slug/staff" element={<ProtectedRoute><Staff /></ProtectedRoute>} />
               <Route path="/dashboard/:slug/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
               <Route path="/dashboard/:slug/data" element={<ProtectedRoute><DataManager /></ProtectedRoute>} />
