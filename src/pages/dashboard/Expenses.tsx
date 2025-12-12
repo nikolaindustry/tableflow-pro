@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useRestaurant } from "@/contexts/RestaurantContext";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -298,6 +299,7 @@ export default function Expenses() {
   };
 
   return (
+    <DashboardLayout>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Expense Management</h1>
@@ -773,5 +775,6 @@ export default function Expenses() {
         </DialogContent>
       </Dialog>
     </div>
+    </DashboardLayout>
   );
 }
