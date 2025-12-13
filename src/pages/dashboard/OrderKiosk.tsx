@@ -32,7 +32,17 @@ import {
   Printer,
   Wallet,
   Bluetooth,
+  Menu,
+  Home,
+  ChefHat as KitchenIcon,
+  ClipboardList,
+  UtensilsCrossed,
+  Building2,
+  BarChart3,
+  Settings,
+  DollarSign,
 } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { TableOccupiedTimer } from '@/components/TableOccupiedTimer';
 import { PrinterSelector } from '@/components/PrinterSelector';
@@ -127,6 +137,8 @@ const SpiceLevelIndicator = ({ level }: { level: 'mild' | 'medium' | 'spicy' | '
 
 export default function OrderKiosk() {
   const { currentRestaurant } = useRestaurant();
+  const navigate = useNavigate();
+  const { slug } = useParams();
   const [floors, setFloors] = useState<Floor[]>([]);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -145,7 +157,19 @@ export default function OrderKiosk() {
   const [cancellingItem, setCancellingItem] = useState(false);
   const [printerSelectorOpen, setPrinterSelectorOpen] = useState(false);
   const [tableOccupationTimes, setTableOccupationTimes] = useState<Record<string, string>>({});
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const isMobile = useIsMobile();
+
+  const navItems = [
+    { title: 'Dashboard', url: `/dashboard/${slug}`, icon: Home },
+    { title: 'Orders', url: `/dashboard/${slug}/orders`, icon: ClipboardList },
+    { title: 'Kitchen View', url: `/dashboard/${slug}/kitchen-view`, icon: KitchenIcon },
+    { title: 'Menu', url: `/dashboard/${slug}/menu`, icon: UtensilsCrossed },
+    { title: 'Floors & Tables', url: `/dashboard/${slug}/floors`, icon: Building2 },
+    { title: 'Expenses', url: `/dashboard/${slug}/expenses`, icon: DollarSign },
+    { title: 'Reports', url: `/dashboard/${slug}/reports`, icon: BarChart3 },
+    { title: 'Settings', url: `/dashboard/${slug}/settings`, icon: Settings },
+  ];
   
   const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing } = useThermalPrinter(); // Thermal printer hook
 
@@ -827,39 +851,75 @@ export default function OrderKiosk() {
   const selectedFloor = floors.find(f => f.id === selectedFloorId);
 
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
-      <div className="border-b bg-card px-4 py-3 flex items-center justify-between shrink-0">
-        <div>
-          <h1 className="text-xl font-bold">{currentRestaurant.name}</h1>
-          <p className="text-sm text-muted-foreground">Order Kiosk</p>
+    <div className="h-screen bg-background flex overflow-hidden">
+      {/* Collapsible Navigation Sidebar */}
+      <div 
+        className={`${
+          sidebarOpen ? 'w-64' : 'w-0'
+        } bg-card border-r flex flex-col overflow-hidden transition-all duration-300 shrink-0`}
+      >
+        <div className="p-4 border-b flex items-center justify-between">
+          <span className="font-semibold text-lg">Navigation</span>
+          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(false)}>
+            <X className="w-4 h-4" />
+          </Button>
         </div>
-        <div className="flex items-center gap-2">
-          {selectedTable && isMobile && (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setShowMobileCart(true)}
-              className="relative"
-            >
-              <ShoppingCart className="w-4 h-4" />
-              {cart.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {cart.length}
-                </span>
-              )}
-            </Button>
-          )}
-          {selectedTable && (
-            <Badge variant="outline" className="text-lg px-4 py-2">
-              Table {selectedTable.table_number}
-            </Badge>
-          )}
-        </div>
+        <ScrollArea className="flex-1 p-2">
+          <div className="space-y-1">
+            {navItems.map((item) => (
+              <Button
+                key={item.url}
+                variant="ghost"
+                className="w-full justify-start gap-3 h-10"
+                onClick={() => navigate(item.url)}
+              >
+                <item.icon className="w-4 h-4 shrink-0" />
+                <span className="truncate">{item.title}</span>
+              </Button>
+            ))}
+          </div>
+        </ScrollArea>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Side - Tables / Menu */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="border-b bg-card px-4 py-3 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)}>
+              <Menu className="w-5 h-5" />
+            </Button>
+            <div>
+              <h1 className="text-xl font-bold">{currentRestaurant.name}</h1>
+              <p className="text-sm text-muted-foreground">Order Kiosk</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {selectedTable && isMobile && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setShowMobileCart(true)}
+                className="relative"
+              >
+                <ShoppingCart className="w-4 h-4" />
+                {cart.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {cart.length}
+                  </span>
+                )}
+              </Button>
+            )}
+            {selectedTable && (
+              <Badge variant="outline" className="text-lg px-4 py-2">
+                Table {selectedTable.table_number}
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Side - Tables / Menu */}
+          <div className="flex-1 flex flex-col overflow-hidden">
           {!selectedTable ? (
             // Table Selection View
             <div className="flex-1 p-6 overflow-auto">
@@ -1740,6 +1800,7 @@ export default function OrderKiosk() {
 
       {/* Printer Selector Dialog */}
       <PrinterSelector open={printerSelectorOpen} onOpenChange={setPrinterSelectorOpen} />
+      </div>
     </div>
   );
 }
