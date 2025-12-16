@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import {
   ChefHat,
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
 type FoodType = Database['public']['Enums']['food_type'];
@@ -79,6 +81,7 @@ export default function KitchenView() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const isMobile = useIsMobile();
   const audioContextRef = useRef<AudioContext | null>(null);
 
   const playNotificationSound = useCallback(() => {
@@ -406,19 +409,21 @@ export default function KitchenView() {
   ) => {
     const Icon = icon;
     return (
-      <div className="flex-1 min-w-[320px]">
-        <div className={`rounded-t-xl p-4 ${bgColor}`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Icon className="w-5 h-5" />
-              <h2 className="font-semibold text-lg">{title}</h2>
+      <div className={isMobile ? "w-full" : "flex-1 min-w-[320px]"}>
+        {!isMobile && (
+          <div className={`rounded-t-xl p-4 ${bgColor}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Icon className="w-5 h-5" />
+                <h2 className="font-semibold text-lg">{title}</h2>
+              </div>
+              <Badge variant="secondary" className="text-lg font-bold">
+                {columnOrders.length}
+              </Badge>
             </div>
-            <Badge variant="secondary" className="text-lg font-bold">
-              {columnOrders.length}
-            </Badge>
           </div>
-        </div>
-        <ScrollArea className="h-[calc(100vh-220px)] bg-muted/30 rounded-b-xl p-3">
+        )}
+        <ScrollArea className={isMobile ? "h-[calc(100vh-280px)] p-2" : "h-[calc(100vh-220px)] bg-muted/30 rounded-b-xl p-3"}>
           <div className="space-y-3">
             {columnOrders.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
@@ -539,74 +544,123 @@ export default function KitchenView() {
   return (
     <DashboardLayout>
       <div className="space-y-4 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <ChefHat className="w-7 h-7" />
-            Kitchen View
-          </h1>
-          <p className="text-muted-foreground">Real-time order management for kitchen staff</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <Button
-            variant={soundEnabled ? 'outline' : 'ghost'}
-            size="sm"
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className={soundEnabled ? 'text-primary' : 'text-muted-foreground'}
-          >
-            {soundEnabled ? (
-              <Volume2 className="w-4 h-4 mr-2" />
-            ) : (
-              <VolumeX className="w-4 h-4 mr-2" />
+        {/* Header */}
+        <div className={`flex ${isMobile ? 'flex-col gap-3' : 'items-center justify-between'}`}>
+          <div>
+            <h1 className={`${isMobile ? 'text-xl' : 'text-2xl'} font-bold flex items-center gap-2`}>
+              <ChefHat className={isMobile ? 'w-5 h-5' : 'w-7 h-7'} />
+              Kitchen View
+            </h1>
+            {!isMobile && (
+              <p className="text-muted-foreground">Real-time order management for kitchen staff</p>
             )}
-            {soundEnabled ? 'Sound On' : 'Sound Off'}
-          </Button>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-            Live updates
+          </div>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Button
+              variant={soundEnabled ? 'outline' : 'ghost'}
+              size="sm"
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className={soundEnabled ? 'text-primary' : 'text-muted-foreground'}
+            >
+              {soundEnabled ? (
+                <Volume2 className="w-4 h-4 sm:mr-2" />
+              ) : (
+                <VolumeX className="w-4 h-4 sm:mr-2" />
+              )}
+              <span className="hidden sm:inline">{soundEnabled ? 'Sound On' : 'Sound Off'}</span>
+            </Button>
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+              <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+              Live
+            </div>
           </div>
         </div>
-      </div>
 
-      {loading ? (
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="flex-1 min-w-[320px]">
-              <div className="h-16 bg-muted rounded-t-xl animate-pulse" />
-              <div className="h-[400px] bg-muted/50 rounded-b-xl p-3">
-                <div className="h-32 bg-muted rounded animate-pulse mb-3" />
-                <div className="h-32 bg-muted rounded animate-pulse" />
+        {loading ? (
+          <div className={isMobile ? "space-y-4" : "flex gap-4 overflow-x-auto pb-4"}>
+            {[1, 2, 3].map((i) => (
+              <div key={i} className={isMobile ? "w-full" : "flex-1 min-w-[320px]"}>
+                <div className="h-16 bg-muted rounded-t-xl animate-pulse" />
+                <div className="h-[400px] bg-muted/50 rounded-b-xl p-3">
+                  <div className="h-32 bg-muted rounded animate-pulse mb-3" />
+                  <div className="h-32 bg-muted rounded animate-pulse" />
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {renderOrderColumn(
-            'Pending',
-            pendingOrders,
-            Clock,
-            'bg-warning/20 text-warning-foreground',
-            'cooking',
-            'Start Cooking'
-          )}
-          {renderOrderColumn(
-            'Cooking',
-            cookingOrders,
-            Flame,
-            'bg-primary/20 text-primary-foreground',
-            'ready',
-            'Mark Ready'
-          )}
-          {renderOrderColumn(
-            'Ready to Serve',
-            readyOrders,
-            CheckCircle,
-            'bg-success/20 text-success-foreground'
-            // No next status - billing must be done via Order Kiosk before marking as served
-          )}
-        </div>
-      )}
+            ))}
+          </div>
+        ) : isMobile ? (
+          /* Mobile: Tabbed view */
+          <Tabs defaultValue="pending" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="pending" className="text-xs">
+                <Clock className="w-3 h-3 mr-1" />
+                Pending ({pendingOrders.length})
+              </TabsTrigger>
+              <TabsTrigger value="cooking" className="text-xs">
+                <Flame className="w-3 h-3 mr-1" />
+                Cooking ({cookingOrders.length})
+              </TabsTrigger>
+              <TabsTrigger value="ready" className="text-xs">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                Ready ({readyOrders.length})
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="pending" className="mt-3">
+              {renderOrderColumn(
+                'Pending',
+                pendingOrders,
+                Clock,
+                'bg-warning/20 text-warning-foreground',
+                'cooking',
+                'Start Cooking'
+              )}
+            </TabsContent>
+            <TabsContent value="cooking" className="mt-3">
+              {renderOrderColumn(
+                'Cooking',
+                cookingOrders,
+                Flame,
+                'bg-primary/20 text-primary-foreground',
+                'ready',
+                'Mark Ready'
+              )}
+            </TabsContent>
+            <TabsContent value="ready" className="mt-3">
+              {renderOrderColumn(
+                'Ready to Serve',
+                readyOrders,
+                CheckCircle,
+                'bg-success/20 text-success-foreground'
+              )}
+            </TabsContent>
+          </Tabs>
+        ) : (
+          /* Desktop: Columns view */
+          <div className="flex gap-4 overflow-x-auto pb-4">
+            {renderOrderColumn(
+              'Pending',
+              pendingOrders,
+              Clock,
+              'bg-warning/20 text-warning-foreground',
+              'cooking',
+              'Start Cooking'
+            )}
+            {renderOrderColumn(
+              'Cooking',
+              cookingOrders,
+              Flame,
+              'bg-primary/20 text-primary-foreground',
+              'ready',
+              'Mark Ready'
+            )}
+            {renderOrderColumn(
+              'Ready to Serve',
+              readyOrders,
+              CheckCircle,
+              'bg-success/20 text-success-foreground'
+            )}
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );
