@@ -293,7 +293,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </header>
 
         {/* Page Content */}
-        <div className="flex-1 p-4 lg:p-8 overflow-auto">
+        <div className={cn(
+          "flex-1 overflow-auto",
+          location.pathname.includes('/order-kiosk') || location.pathname.includes('/kitchen-view')
+            ? "p-0"
+            : "p-4 lg:p-8"
+        )}>
           {children}
         </div>
       </main>
