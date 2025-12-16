@@ -24,6 +24,7 @@ import {
   Send,
   Trash2,
   Search,
+  ArrowLeft,
   Receipt,
   CheckCircle2,
   Clock,
@@ -842,19 +843,29 @@ export default function OrderKiosk() {
         </div>
         <div className="flex items-center gap-2">
           {selectedTable && isMobile && (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setShowMobileCart(true)}
-              className="relative"
-            >
-              <ShoppingCart className="w-4 h-4" />
-              {cart.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {cart.length}
-                </span>
-              )}
-            </Button>
+            <>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleCloseOrder}
+              >
+                <ArrowLeft className="w-4 h-4 mr-1" />
+                Tables
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setShowMobileCart(true)}
+                className="relative"
+              >
+                <ShoppingCart className="w-4 h-4" />
+                {cart.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {cart.length}
+                  </span>
+                )}
+              </Button>
+            </>
           )}
           {selectedTable && (
             <Badge variant="outline" className="text-lg px-4 py-2">
