@@ -836,42 +836,43 @@ export default function OrderKiosk() {
     <DashboardLayout>
     <div className="h-full bg-background flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="border-b bg-card px-4 py-3 flex items-center justify-between shrink-0">
-        <div>
-          <h1 className="text-xl font-bold">{currentRestaurant.name}</h1>
-          <p className="text-sm text-muted-foreground">Order Kiosk</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {selectedTable && isMobile && (
-            <>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={handleCloseOrder}
-              >
-                <ArrowLeft className="w-4 h-4 mr-1" />
-                Tables
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => setShowMobileCart(true)}
-                className="relative"
-              >
-                <ShoppingCart className="w-4 h-4" />
-                {cart.length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {cart.length}
-                  </span>
-                )}
-              </Button>
-            </>
-          )}
-          {selectedTable && (
-            <Badge variant="outline" className="text-lg px-4 py-2">
-              Table {selectedTable.table_number}
-            </Badge>
-          )}
+      <div className="border-b bg-card px-4 py-3 shrink-0">
+        <div className="flex items-center justify-between">
+          <div className="min-w-0 flex-shrink">
+            <h1 className="text-xl font-bold truncate">{currentRestaurant.name}</h1>
+            <p className="text-sm text-muted-foreground">Order Kiosk</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {selectedTable && isMobile && (
+              <>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={handleCloseOrder}
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={() => setShowMobileCart(true)}
+                  className="relative"
+                >
+                  <ShoppingCart className="w-5 h-5" />
+                  {cart.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                      {cart.length}
+                    </span>
+                  )}
+                </Button>
+              </>
+            )}
+            {selectedTable && (
+              <Badge variant="outline" className="text-base px-3 py-1.5">
+                {selectedTable.table_number}
+              </Badge>
+            )}
+          </div>
         </div>
       </div>
 
