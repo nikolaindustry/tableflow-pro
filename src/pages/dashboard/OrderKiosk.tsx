@@ -1014,8 +1014,8 @@ export default function OrderKiosk() {
               </div>
 
               {/* Menu Items Grid */}
-              <ScrollArea className="flex-1 p-4">
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              <ScrollArea className="flex-1 p-4 overflow-x-hidden">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {filteredMenuItems.map((item) => {
                     // Count existing order items (with status) and new items separately
                     const existingItem = cart.find(c => c.menuItem.id === item.id && c.status);
