@@ -990,12 +990,13 @@ export default function OrderKiosk() {
                     className="pl-9"
                   />
                 </div>
-                <ScrollArea className="w-full overflow-x-auto">
-                  <div className="flex gap-2 pb-1">
+                <div className="w-full overflow-x-auto">
+                  <div className="flex gap-2 pb-1 whitespace-nowrap">
                     <Button
                       size="sm"
                       variant={selectedCategoryId === 'all' ? 'default' : 'outline'}
                       onClick={() => setSelectedCategoryId('all')}
+                      className="shrink-0"
                     >
                       All
                     </Button>
@@ -1005,12 +1006,13 @@ export default function OrderKiosk() {
                         size="sm"
                         variant={selectedCategoryId === cat.id ? 'default' : 'outline'}
                         onClick={() => setSelectedCategoryId(cat.id)}
+                        className="shrink-0"
                       >
                         {cat.name}
                       </Button>
                     ))}
                   </div>
-                </ScrollArea>
+                </div>
               </div>
 
               {/* Menu Items Grid */}
