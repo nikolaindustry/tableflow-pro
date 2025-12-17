@@ -129,7 +129,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   ];
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-background flex overflow-x-hidden">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -276,7 +276,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-h-screen">
+      <main className="flex-1 flex flex-col min-h-screen min-w-0 overflow-hidden">
         {/* Mobile Header */}
         <header className="lg:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-card">
           <button
@@ -294,9 +294,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
         {/* Page Content */}
         <div className={cn(
-          "flex-1 overflow-auto",
+          "flex-1 overflow-auto min-w-0",
           location.pathname.includes('/order-kiosk') || location.pathname.includes('/kitchen-view')
-            ? "p-0"
+            ? "p-0 overflow-hidden"
             : "p-4 lg:p-8"
         )}>
           {children}
