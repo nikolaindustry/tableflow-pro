@@ -834,7 +834,7 @@ export default function OrderKiosk() {
 
   return (
     <DashboardLayout>
-    <div className="h-full bg-background flex flex-col overflow-hidden">
+    <div className="h-full w-full bg-background flex flex-col overflow-hidden">
       {/* Header */}
       <div className="border-b bg-card px-4 py-3 shrink-0">
         <div className="flex items-center justify-between">
@@ -876,9 +876,9 @@ export default function OrderKiosk() {
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-w-0">
           {/* Left Side - Tables / Menu */}
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {!selectedTable ? (
             // Table Selection View
             <div className="flex-1 p-6 overflow-auto">
@@ -978,7 +978,7 @@ export default function OrderKiosk() {
             </div>
           ) : (
             // Menu Selection View
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden min-w-0 w-full">
               {/* Search & Categories */}
               <div className="p-4 border-b space-y-3 shrink-0">
                 <div className="relative">
@@ -990,7 +990,7 @@ export default function OrderKiosk() {
                     className="pl-9"
                   />
                 </div>
-                <ScrollArea className="w-full">
+                <ScrollArea className="w-full overflow-x-auto">
                   <div className="flex gap-2 pb-1">
                     <Button
                       size="sm"
@@ -1014,8 +1014,8 @@ export default function OrderKiosk() {
               </div>
 
               {/* Menu Items Grid */}
-              <ScrollArea className="flex-1 p-4 overflow-x-hidden">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              <ScrollArea className="flex-1 p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-w-full">
                   {filteredMenuItems.map((item) => {
                     // Count existing order items (with status) and new items separately
                     const existingItem = cart.find(c => c.menuItem.id === item.id && c.status);
