@@ -15,6 +15,15 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from '@/components/ui/drawer';
+import { useIsMobile } from '@/hooks/use-mobile';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -118,12 +127,14 @@ const SPICE_ICONS: Record<string, number> = {
 
 export default function Orders() {
   const { currentRestaurant } = useRestaurant();
+  const isMobile = useIsMobile();
   const [orders, setOrders] = useState<Order[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
 
   // New order form
   const [selectedTableId, setSelectedTableId] = useState('');
@@ -516,22 +527,22 @@ export default function Orders() {
           <h1 className="text-2xl font-bold">Orders</h1>
           <p className="text-muted-foreground">Create and manage table orders</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="gradient" onClick={resetForm}>
-              <Plus className="w-4 h-4 mr-2" />
-              New Order
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh]">
-            <DialogHeader>
-              <DialogTitle>Create New Order</DialogTitle>
-              <DialogDescription>Select a table and add menu items</DialogDescription>
-            </DialogHeader>
-            <div className="grid md:grid-cols-2 gap-6 mt-4">
-              {/* Menu Items */}
-              <div className="space-y-4">
-                <div className="space-y-2">
+        {isMobile ? (
+          <Drawer open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DrawerTrigger asChild>
+              <Button variant="gradient" onClick={resetForm}>
+                <Plus className="w-4 h-4 mr-2" />
+                New Order
+              </Button>
+            </DrawerTrigger>
+            <DrawerContent className="max-h-[95vh]">
+              <DrawerHeader className="pb-2">
+                <DrawerTitle>Create New Order</DrawerTitle>
+                <DrawerDescription>Select a table and add menu items</DrawerDescription>
+              </DrawerHeader>
+              <div className="flex flex-col px-4 pb-4 overflow-hidden">
+                {/* Table Selection */}
+                <div className="space-y-2 mb-3">
                   <Label>Table (optional)</Label>
                   <Select value={selectedTableId} onValueChange={setSelectedTableId}>
                     <SelectTrigger>
@@ -547,7 +558,9 @@ export default function Orders() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
+                
+                {/* Search */}
+                <div className="space-y-2 mb-3">
                   <Label>Search Menu</Label>
                   <Input
                     placeholder="Search items or categories..."
@@ -555,7 +568,9 @@ export default function Orders() {
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
-                <ScrollArea className="h-[300px] border rounded-lg p-2">
+                
+                {/* Menu Items List */}
+                <ScrollArea className="h-[35vh] border rounded-lg p-2 mb-3">
                   <div className="space-y-2">
                     {filteredMenuItems.length === 0 ? (
                       <p className="text-center text-muted-foreground py-4">No menu items found</p>
@@ -563,17 +578,17 @@ export default function Orders() {
                       filteredMenuItems.map((item) => (
                         <div
                           key={item.id}
-                          className="flex items-center justify-between p-3 bg-card rounded-lg border hover:border-primary/50 cursor-pointer transition-colors"
+                          className="flex items-center justify-between p-2 bg-card rounded-lg border hover:border-primary/50 cursor-pointer transition-colors"
                           onClick={() => addToCart(item)}
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
                             {renderFoodTypeIcon(item.food_type)}
-                            <div>
-                              <p className="font-medium">{item.name}</p>
+                            <div className="min-w-0">
+                              <p className="font-medium text-sm truncate">{item.name}</p>
                               <p className="text-xs text-muted-foreground">{item.category.name}</p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1 shrink-0">
                             {item.spice_level && (
                               <div className="flex">
                                 {[...Array(SPICE_ICONS[item.spice_level] || 0)].map((_, i) => (
@@ -581,8 +596,8 @@ export default function Orders() {
                                 ))}
                               </div>
                             )}
-                            <span className="font-semibold">₹{item.price}</span>
-                            <Button size="icon" variant="ghost" className="h-8 w-8">
+                            <span className="font-semibold text-sm">₹{item.price}</span>
+                            <Button size="icon" variant="ghost" className="h-7 w-7">
                               <Plus className="w-4 h-4" />
                             </Button>
                           </div>
@@ -591,83 +606,274 @@ export default function Orders() {
                     )}
                   </div>
                 </ScrollArea>
-              </div>
-
-              {/* Cart */}
-              <div className="space-y-4">
-                <Label>Order Items ({cart.length})</Label>
-                <ScrollArea className="h-[250px] border rounded-lg p-2">
+                
+                {/* Cart Section */}
+                <div className="space-y-2 border-t pt-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Order Items ({cart.length})</Label>
+                    {cart.length > 0 && (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setMobileCartOpen(true)}
+                      >
+                        View Cart
+                      </Button>
+                    )}
+                  </div>
                   {cart.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-8">No items added yet</p>
+                    <p className="text-center text-muted-foreground py-4 text-sm">No items added yet</p>
                   ) : (
-                    <div className="space-y-2">
-                      {cart.map((item) => (
-                        <div key={item.menuItemId} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                          <div className="flex items-center gap-2">
-                            {renderFoodTypeIcon(item.food_type)}
-                            <span className="font-medium">{item.name}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              className="h-7 w-7"
-                              onClick={() => updateCartQuantity(item.menuItemId, -1)}
-                            >
-                              <Minus className="w-3 h-3" />
-                            </Button>
-                            <span className="w-8 text-center font-medium">{item.quantity}</span>
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              className="h-7 w-7"
-                              onClick={() => updateCartQuantity(item.menuItemId, 1)}
-                            >
-                              <Plus className="w-3 h-3" />
-                            </Button>
-                            <span className="w-16 text-right font-semibold">
-                              ₹{item.price * item.quantity}
-                            </span>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7 text-destructive"
-                              onClick={() => removeFromCart(item.menuItemId)}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Total</p>
+                        <p className="text-xl font-bold">₹{cartTotal}</p>
+                      </div>
+                      <Button
+                        variant="gradient"
+                        onClick={handleCreateOrder}
+                        disabled={cart.length === 0}
+                      >
+                        Create Order
+                      </Button>
                     </div>
                   )}
-                </ScrollArea>
-                <div className="space-y-2">
-                  <Label>Order Notes (optional)</Label>
-                  <Textarea
-                    placeholder="Special instructions..."
-                    value={orderNotes}
-                    onChange={(e) => setOrderNotes(e.target.value)}
-                  />
-                </div>
-                <div className="flex items-center justify-between pt-4 border-t">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Total</p>
-                    <p className="text-2xl font-bold">₹{cartTotal}</p>
-                  </div>
-                  <Button
-                    variant="gradient"
-                    size="lg"
-                    onClick={handleCreateOrder}
-                    disabled={cart.length === 0}
-                  >
-                    Create Order
-                  </Button>
                 </div>
               </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+              
+              {/* Mobile Cart Sheet */}
+              <Drawer open={mobileCartOpen} onOpenChange={setMobileCartOpen}>
+                <DrawerContent className="max-h-[85vh]">
+                  <DrawerHeader>
+                    <DrawerTitle>Order Items ({cart.length})</DrawerTitle>
+                  </DrawerHeader>
+                  <div className="px-4 pb-4">
+                    <ScrollArea className="h-[40vh] mb-4">
+                      <div className="space-y-2">
+                        {cart.map((item) => (
+                          <div key={item.menuItemId} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg gap-2">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              {renderFoodTypeIcon(item.food_type)}
+                              <span className="font-medium text-sm truncate">{item.name}</span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                className="h-7 w-7"
+                                onClick={() => updateCartQuantity(item.menuItemId, -1)}
+                              >
+                                <Minus className="w-3 h-3" />
+                              </Button>
+                              <span className="w-6 text-center font-medium text-sm">{item.quantity}</span>
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                className="h-7 w-7"
+                                onClick={() => updateCartQuantity(item.menuItemId, 1)}
+                              >
+                                <Plus className="w-3 h-3" />
+                              </Button>
+                              <span className="w-14 text-right font-semibold text-sm">
+                                ₹{item.price * item.quantity}
+                              </span>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-destructive"
+                                onClick={() => removeFromCart(item.menuItemId)}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                    <div className="space-y-2 mb-4">
+                      <Label>Order Notes (optional)</Label>
+                      <Textarea
+                        placeholder="Special instructions..."
+                        value={orderNotes}
+                        onChange={(e) => setOrderNotes(e.target.value)}
+                        className="h-16"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between pt-3 border-t">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Total</p>
+                        <p className="text-xl font-bold">₹{cartTotal}</p>
+                      </div>
+                      <Button
+                        variant="gradient"
+                        onClick={() => {
+                          setMobileCartOpen(false);
+                          handleCreateOrder();
+                        }}
+                        disabled={cart.length === 0}
+                      >
+                        Create Order
+                      </Button>
+                    </div>
+                  </div>
+                </DrawerContent>
+              </Drawer>
+            </DrawerContent>
+          </Drawer>
+        ) : (
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="gradient" onClick={resetForm}>
+                <Plus className="w-4 h-4 mr-2" />
+                New Order
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[90vh]">
+              <DialogHeader>
+                <DialogTitle>Create New Order</DialogTitle>
+                <DialogDescription>Select a table and add menu items</DialogDescription>
+              </DialogHeader>
+              <div className="grid md:grid-cols-2 gap-6 mt-4">
+                {/* Menu Items */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Table (optional)</Label>
+                    <Select value={selectedTableId} onValueChange={setSelectedTableId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Takeaway / No Table" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="takeaway">Takeaway / No Table</SelectItem>
+                        {tables.map((table) => (
+                          <SelectItem key={table.id} value={table.id}>
+                            {table.table_number} ({table.floor.name})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Search Menu</Label>
+                    <Input
+                      placeholder="Search items or categories..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <ScrollArea className="h-[300px] border rounded-lg p-2">
+                    <div className="space-y-2">
+                      {filteredMenuItems.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-4">No menu items found</p>
+                      ) : (
+                        filteredMenuItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between p-3 bg-card rounded-lg border hover:border-primary/50 cursor-pointer transition-colors"
+                            onClick={() => addToCart(item)}
+                          >
+                            <div className="flex items-center gap-3">
+                              {renderFoodTypeIcon(item.food_type)}
+                              <div>
+                                <p className="font-medium">{item.name}</p>
+                                <p className="text-xs text-muted-foreground">{item.category.name}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {item.spice_level && (
+                                <div className="flex">
+                                  {[...Array(SPICE_ICONS[item.spice_level] || 0)].map((_, i) => (
+                                    <Flame key={i} className="w-3 h-3 text-destructive" />
+                                  ))}
+                                </div>
+                              )}
+                              <span className="font-semibold">₹{item.price}</span>
+                              <Button size="icon" variant="ghost" className="h-8 w-8">
+                                <Plus className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                </div>
+
+                {/* Cart */}
+                <div className="space-y-4">
+                  <Label>Order Items ({cart.length})</Label>
+                  <ScrollArea className="h-[250px] border rounded-lg p-2">
+                    {cart.length === 0 ? (
+                      <p className="text-center text-muted-foreground py-8">No items added yet</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {cart.map((item) => (
+                          <div key={item.menuItemId} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              {renderFoodTypeIcon(item.food_type)}
+                              <span className="font-medium">{item.name}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                className="h-7 w-7"
+                                onClick={() => updateCartQuantity(item.menuItemId, -1)}
+                              >
+                                <Minus className="w-3 h-3" />
+                              </Button>
+                              <span className="w-8 text-center font-medium">{item.quantity}</span>
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                className="h-7 w-7"
+                                onClick={() => updateCartQuantity(item.menuItemId, 1)}
+                              >
+                                <Plus className="w-3 h-3" />
+                              </Button>
+                              <span className="w-16 text-right font-semibold">
+                                ₹{item.price * item.quantity}
+                              </span>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-destructive"
+                                onClick={() => removeFromCart(item.menuItemId)}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                  <div className="space-y-2">
+                    <Label>Order Notes (optional)</Label>
+                    <Textarea
+                      placeholder="Special instructions..."
+                      value={orderNotes}
+                      onChange={(e) => setOrderNotes(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between pt-4 border-t">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total</p>
+                      <p className="text-2xl font-bold">₹{cartTotal}</p>
+                    </div>
+                    <Button
+                      variant="gradient"
+                      size="lg"
+                      onClick={handleCreateOrder}
+                      disabled={cart.length === 0}
+                    >
+                      Create Order
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'active' | 'completed')}>

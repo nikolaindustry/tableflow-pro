@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
 import { supabase } from '@/integrations/supabase/client';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,6 +24,7 @@ import {
   Send,
   Trash2,
   Search,
+  ArrowLeft,
   Receipt,
   CheckCircle2,
   Clock,
@@ -808,58 +810,75 @@ export default function OrderKiosk() {
 
   if (!currentRestaurant) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-background text-center p-4">
-        <ShoppingCart className="w-16 h-16 text-muted-foreground mb-4" />
-        <h2 className="text-2xl font-semibold">No Restaurant Selected</h2>
-        <p className="text-muted-foreground">Please select or create a restaurant first</p>
-      </div>
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center min-h-screen bg-background text-center p-4">
+          <ShoppingCart className="w-16 h-16 text-muted-foreground mb-4" />
+          <h2 className="text-2xl font-semibold">No Restaurant Selected</h2>
+          <p className="text-muted-foreground">Please select or create a restaurant first</p>
+        </div>
+      </DashboardLayout>
     );
   }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
-      </div>
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-screen bg-background">
+          <div className="animate-pulse text-muted-foreground">Loading...</div>
+        </div>
+      </DashboardLayout>
     );
   }
 
   const selectedFloor = floors.find(f => f.id === selectedFloorId);
 
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
-      <div className="border-b bg-card px-4 py-3 flex items-center justify-between shrink-0">
-        <div>
-          <h1 className="text-xl font-bold">{currentRestaurant.name}</h1>
-          <p className="text-sm text-muted-foreground">Order Kiosk</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {selectedTable && isMobile && (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setShowMobileCart(true)}
-              className="relative"
-            >
-              <ShoppingCart className="w-4 h-4" />
-              {cart.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {cart.length}
-                </span>
-              )}
-            </Button>
-          )}
-          {selectedTable && (
-            <Badge variant="outline" className="text-lg px-4 py-2">
-              Table {selectedTable.table_number}
-            </Badge>
-          )}
+    <DashboardLayout>
+    <div className="h-full w-full bg-background flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="border-b bg-card px-4 py-3 shrink-0">
+        <div className="flex items-center justify-between">
+          <div className="min-w-0 flex-shrink">
+            <h1 className="text-xl font-bold truncate">{currentRestaurant.name}</h1>
+            <p className="text-sm text-muted-foreground">Order Kiosk</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {selectedTable && isMobile && (
+              <>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={handleCloseOrder}
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={() => setShowMobileCart(true)}
+                  className="relative"
+                >
+                  <ShoppingCart className="w-5 h-5" />
+                  {cart.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                      {cart.length}
+                    </span>
+                  )}
+                </Button>
+              </>
+            )}
+            {selectedTable && (
+              <Badge variant="outline" className="text-base px-3 py-1.5">
+                {selectedTable.table_number}
+              </Badge>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Side - Tables / Menu */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-w-0">
+          {/* Left Side - Tables / Menu */}
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {!selectedTable ? (
             // Table Selection View
             <div className="flex-1 p-6 overflow-auto">
@@ -959,7 +978,7 @@ export default function OrderKiosk() {
             </div>
           ) : (
             // Menu Selection View
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden min-w-0 w-full">
               {/* Search & Categories */}
               <div className="p-4 border-b space-y-3 shrink-0">
                 <div className="relative">
@@ -971,7 +990,7 @@ export default function OrderKiosk() {
                     className="pl-9"
                   />
                 </div>
-                <ScrollArea className="w-full">
+                <ScrollArea className="w-full overflow-x-auto">
                   <div className="flex gap-2 pb-1">
                     <Button
                       size="sm"
@@ -996,7 +1015,7 @@ export default function OrderKiosk() {
 
               {/* Menu Items Grid */}
               <ScrollArea className="flex-1 p-4">
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-w-full">
                   {filteredMenuItems.map((item) => {
                     // Count existing order items (with status) and new items separately
                     const existingItem = cart.find(c => c.menuItem.id === item.id && c.status);
@@ -1741,5 +1760,6 @@ export default function OrderKiosk() {
       {/* Printer Selector Dialog */}
       <PrinterSelector open={printerSelectorOpen} onOpenChange={setPrinterSelectorOpen} />
     </div>
+    </DashboardLayout>
   );
 }
