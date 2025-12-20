@@ -14,6 +14,16 @@ export function useThermalPrinter() {
     setConnectedDevice(thermalPrinter.getConnectedDevice());
   }, []);
 
+  // Poll for connected device status to keep UI in sync
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const device = thermalPrinter.getConnectedDevice();
+      setConnectedDevice(device);
+    }, 1000); // Check every second
+
+    return () => clearInterval(interval);
+  }, []);
+
   const scanDevices = useCallback(async () => {
     setScanning(true);
     try {
@@ -53,6 +63,18 @@ export function useThermalPrinter() {
     }
   }, [isBluetoothAvailable]);
 
+  const checkPermissions = useCallback(async () => {
+    return await thermalPrinter.checkPermissions();
+  }, []);
+
+  const requestPermissions = useCallback(async () => {
+    return await thermalPrinter.requestBluetoothPermissions();
+  }, []);
+
+  const openSettings = useCallback(async () => {
+    await thermalPrinter.openAppSettings();
+  }, []);
+
   return {
     scanning,
     devices,
@@ -64,5 +86,8 @@ export function useThermalPrinter() {
     connect,
     disconnect,
     printBill,
+    checkPermissions,
+    requestPermissions,
+    openSettings,
   };
 }

@@ -23,15 +23,41 @@ export function PrinterSelector({ open, onOpenChange }: PrinterSelectorProps) {
     connect,
     disconnect,
     isBluetoothAvailable,
+    openSettings,
   } = useThermalPrinter();
 
   const [selectedDevice, setSelectedDevice] = useState<PrinterDevice | null>(null);
 
   const handleScan = async () => {
     try {
-      await scanDevices();
+      console.log('[PrinterSelector] Starting device scan...');
+      const foundDevices = await scanDevices();
+      console.log('[PrinterSelector] Scan completed, found', foundDevices.length, 'devices');
+      
+      if (foundDevices.length === 0) {
+        toast.info('No Bluetooth printers found. Make sure your printer is powered on and in pairing mode.');
+      } else {
+        toast.success(`Found ${foundDevices.length} Bluetooth device${foundDevices.length > 1 ? 's' : ''}`);
+      }
     } catch (error: any) {
-      toast.error(error.message);
+      console.error('[PrinterSelector] Scan error:', error);
+      
+      // Check if it's a permission error
+      if (error.message && error.message.includes('permission')) {
+        toast.error(
+          'Bluetooth permissions required',
+          {
+            description: 'Please grant Bluetooth and Location permissions to scan for printers.',
+            action: {
+              label: 'Open Settings',
+              onClick: () => openSettings(),
+            },
+            duration: 10000,
+          }
+        );
+      } else {
+        toast.error(error.message || 'Failed to scan for printers');
+      }
     }
   };
 
@@ -85,7 +111,7 @@ export function PrinterSelector({ open, onOpenChange }: PrinterSelectorProps) {
             Connect Thermal Printer
           </DialogTitle>
           <DialogDescription>
-            Scan for nearby Bluetooth thermal printers
+            Scan for nearby Bluetooth thermal printers (Classic BT & BLE)
           </DialogDescription>
         </DialogHeader>
 
@@ -140,9 +166,20 @@ export function PrinterSelector({ open, onOpenChange }: PrinterSelectorProps) {
                       onClick={() => !isConnected && handleConnect(device)}
                       disabled={isConnecting || isConnected}
                     >
-                      <div className="flex items-center gap-2">
-                        <Bluetooth className="w-4 h-4 text-muted-foreground" />
-                        <span>{device.name}</span>
+                      <div className="flex flex-col items-start gap-1">
+                        <div className="flex items-center gap-2">
+                          <Bluetooth className="w-4 h-4 text-muted-foreground" />
+                          <span className="font-medium">{device.name}</span>
+                          {device.type && (
+                            <Badge variant="outline" className="text-xs">
+                              {device.type === 'ble' ? 'BLE' : device.type === 'classic' ? 'Classic' : 'Unknown'}
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground ml-6">
+                          {device.address}
+                          {device.rssi && ` • Signal: ${device.rssi} dBm`}
+                        </span>
                       </div>
                       {isConnecting ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -158,8 +195,16 @@ export function PrinterSelector({ open, onOpenChange }: PrinterSelectorProps) {
 
           {devices.length === 0 && !scanning && (
             <p className="text-sm text-muted-foreground text-center py-4">
-              Click "Scan for Printers" to find nearby Bluetooth printers
+              Click "Scan for Printers" to find nearby Bluetooth devices.<br />
+              <span className="text-xs">Scan may take up to 10 seconds.</span>
             </p>
+          )}
+          
+          {scanning && (
+            <div className="flex flex-col items-center gap-2 py-4">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Searching for Bluetooth devices...</p>
+            </div>
           )}
         </div>
       </DialogContent>

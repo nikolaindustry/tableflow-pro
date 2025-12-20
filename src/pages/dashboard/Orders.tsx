@@ -977,13 +977,13 @@ export default function Orders() {
                 </Button>
                 {isBluetoothAvailable && (
                   <Button 
-                    variant="outline" 
-                    className={`flex-1 ${connectedDevice ? 'border-success text-success' : ''}`}
+                    variant={connectedDevice ? "default" : "outline"}
+                    className={`flex-1 ${connectedDevice ? 'bg-success hover:bg-success/90 text-white' : ''}`}
                     onClick={() => connectedDevice ? handlePrintBill(true) : setPrinterSelectorOpen(true)}
                     disabled={printing}
                   >
                     <Bluetooth className="w-4 h-4 mr-2" />
-                    {connectedDevice ? 'Thermal Print' : 'Connect Printer'}
+                    {connectedDevice ? `Print via ${connectedDevice.name}` : 'Connect Printer'}
                   </Button>
                 )}
               </div>

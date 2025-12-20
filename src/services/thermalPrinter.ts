@@ -4,6 +4,8 @@ import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
 export interface PrinterDevice {
   name: string;
   address: string;
+  type?: 'classic' | 'ble' | 'unknown'; // Bluetooth device type
+  rssi?: number; // Signal strength (useful for BLE)
 }
 
 export interface BillData {
@@ -23,9 +25,59 @@ export interface BillData {
 class ThermalPrinterService {
   private connectedDevice: PrinterDevice | null = null;
   private isNative = Capacitor.isNativePlatform();
+  private supportsBLE = false; // Track if plugin supports BLE
 
   async isBluetoothAvailable(): Promise<boolean> {
     return this.isNative;
+  }
+
+  async checkBLESupport(): Promise<boolean> {
+    if (!this.isNative) {
+      return false;
+    }
+
+    try {
+      // Check if the plugin has BLE-specific methods
+      if (typeof CapacitorThermalPrinter.scanBLE === 'function' || 
+          typeof CapacitorThermalPrinter.startBleScan === 'function') {
+        this.supportsBLE = true;
+        console.log('[ThermalPrinter] BLE support detected in plugin');
+        return true;
+      }
+      
+      console.log('[ThermalPrinter] No BLE-specific methods found - using Classic Bluetooth only');
+      return false;
+    } catch (error) {
+      console.warn('[ThermalPrinter] Error checking BLE support:', error);
+      return false;
+    }
+  }
+
+  async checkPermissions(): Promise<boolean> {
+    if (!this.isNative) {
+      return false;
+    }
+
+    try {
+      // Try to check current permission status without requesting
+      if (typeof CapacitorThermalPrinter.checkPermissions === 'function') {
+        const result = await CapacitorThermalPrinter.checkPermissions();
+        console.log('[ThermalPrinter] Current permission status:', JSON.stringify(result));
+        
+        // Use similar logic as requestBluetoothPermissions to check status
+        if (result && typeof result === 'object') {
+          const values = Object.values(result);
+          const hasGranted = values.some(v => v === 'granted' || v === 'authorized' || v === true);
+          return hasGranted;
+        }
+      }
+      
+      console.log('[ThermalPrinter] checkPermissions not available in plugin');
+      return false;
+    } catch (error) {
+      console.warn('[ThermalPrinter] Error checking permissions:', error);
+      return false;
+    }
   }
 
   async requestBluetoothPermissions(): Promise<boolean> {
@@ -35,9 +87,83 @@ class ThermalPrinterService {
 
     try {
       const result = await CapacitorThermalPrinter.requestPermissions();
-      return result.granted === true;
+      console.log('[ThermalPrinter] Permission request result:', JSON.stringify(result));
+      
+      // Handle different possible result formats from the plugin
+      if (result === null || result === undefined) {
+        console.warn('[ThermalPrinter] Permission result is null/undefined - assuming granted');
+        return true; // Some plugins return nothing on success
+      }
+      
+      if (typeof result === 'boolean') {
+        return result;
+      }
+      
+      if (typeof result === 'string') {
+        return result === 'granted' || result === 'authorized';
+      }
+      
+      if (typeof result === 'object') {
+        // Log all keys for debugging
+        console.log('[ThermalPrinter] Permission object keys:', Object.keys(result));
+        console.log('[ThermalPrinter] Permission object values:', Object.values(result));
+        
+        // Check common permission result formats
+        if (result.granted === true || result.granted === 'granted') return true;
+        if (result.status === 'granted' || result.status === 'authorized') return true;
+        if (result.state === 'granted' || result.state === 'authorized') return true;
+        
+        // Check Android-style permission results
+        if (result.bluetoothScan === 'granted') return true;
+        if (result.bluetoothConnect === 'granted') return true;
+        if (result.bluetooth === 'granted') return true;
+        if (result.location === 'granted') return true;
+        
+        // Check for permission arrays
+        if (result.permissions && Array.isArray(result.permissions)) {
+          const hasGranted = result.permissions.some((p: any) => 
+            p === 'granted' || p.status === 'granted' || p.state === 'granted'
+          );
+          if (hasGranted) return true;
+        }
+        
+        // If ANY value in the object is 'granted' or true, consider it sufficient
+        const values = Object.values(result);
+        const hasAnyGranted = values.some(v => 
+          v === 'granted' || 
+          v === 'authorized' || 
+          v === true ||
+          (typeof v === 'object' && v !== null && (v.status === 'granted' || v.state === 'granted'))
+        );
+        
+        if (hasAnyGranted) {
+          console.log('[ThermalPrinter] At least one permission granted');
+          return true;
+        }
+        
+        // Check if all values are NOT 'denied' (some plugins return 'prompt' before requesting)
+        const allNotDenied = values.every(v => v !== 'denied' && v !== 'restricted');
+        if (allNotDenied && values.length > 0) {
+          console.log('[ThermalPrinter] No explicit denials detected, assuming granted');
+          return true;
+        }
+      }
+      
+      console.warn('[ThermalPrinter] Could not determine permission status from result, denying by default');
+      return false;
     } catch (error) {
-      console.error('Failed to request Bluetooth permissions:', error);
+      console.error('[ThermalPrinter] Failed to request Bluetooth permissions:', error);
+      
+      // If the plugin doesn't implement requestPermissions, try to proceed anyway
+      // The Android system will show permission dialogs when needed
+      if (error instanceof Error && 
+          (error.message.includes('not implemented') || 
+           error.message.includes('not available') ||
+           error.message.includes('Unimplemented'))) {
+        console.log('[ThermalPrinter] Plugin doesn\'t implement requestPermissions - assuming system handles it');
+        return true;
+      }
+      
       return false;
     }
   }
@@ -47,50 +173,118 @@ class ThermalPrinterService {
       throw new Error('Bluetooth scanning is only available on mobile devices');
     }
 
-    // Request permissions first
-    const hasPermissions = await this.requestBluetoothPermissions();
+    console.log('[ThermalPrinter] Starting scan - checking permissions first...');
+    
+    // First check if permissions are already granted
+    const alreadyGranted = await this.checkPermissions();
+    console.log('[ThermalPrinter] Permissions already granted:', alreadyGranted);
+    
+    // Request permissions if not already granted
+    let hasPermissions = alreadyGranted;
     if (!hasPermissions) {
-      throw new Error('Bluetooth permissions are required to scan for printers');
+      console.log('[ThermalPrinter] Requesting permissions...');
+      hasPermissions = await this.requestBluetoothPermissions();
     }
+    
+    if (!hasPermissions) {
+      const errorMsg = 'Bluetooth permissions are required to scan for printers. Please grant Bluetooth and Location permissions in your device settings.';
+      console.error('[ThermalPrinter]', errorMsg);
+      throw new Error(errorMsg);
+    }
+    
+    console.log('[ThermalPrinter] Permissions confirmed - proceeding with scan');
 
     return new Promise(async (resolve, reject) => {
       const devices: PrinterDevice[] = [];
       let listenerHandle: { remove: () => void } | null = null;
+      let scanTimeout: NodeJS.Timeout | null = null;
+      
+      const cleanup = () => {
+        if (scanTimeout) {
+          clearTimeout(scanTimeout);
+          scanTimeout = null;
+        }
+        if (listenerHandle) {
+          listenerHandle.remove();
+          listenerHandle = null;
+        }
+      };
       
       try {
         // Set up listener for discovered devices
         listenerHandle = await CapacitorThermalPrinter.addListener('discoverDevices', (data: any) => {
-          if (data.devices) {
-            data.devices.forEach((device: any) => {
-              if (!devices.find(d => d.address === device.address)) {
-                devices.push({
-                  name: device.name || 'Unknown Printer',
-                  address: device.address,
-                });
-              }
-            });
+          console.log('[ThermalPrinter] Discovery event received:', JSON.stringify(data));
+          
+          // Handle different event payload formats
+          let deviceList: any[] = [];
+          
+          if (data.devices && Array.isArray(data.devices)) {
+            // Standard format: { devices: [...] }
+            deviceList = data.devices;
+          } else if (data.device) {
+            // Single device format: { device: {...} }
+            deviceList = [data.device];
+          } else if (data.name || data.address) {
+            // Direct device data: { name: ..., address: ... }
+            deviceList = [data];
           }
+          
+          deviceList.forEach((device: any) => {
+            if (device && device.address) {
+              // Only add if not already in list
+              if (!devices.find(d => d.address === device.address)) {
+                // Determine device type based on available info
+                let deviceType: 'classic' | 'ble' | 'unknown' = 'unknown';
+                
+                // BLE devices typically have UUID-style addresses or specific type indicators
+                if (device.type === 'BLE' || device.type === 'ble' || device.isBLE) {
+                  deviceType = 'ble';
+                } else if (device.type === 'CLASSIC' || device.type === 'classic' || device.type === 'SPP') {
+                  deviceType = 'classic';
+                } else if (device.address && device.address.includes('-')) {
+                  // BLE devices often use UUID format with dashes
+                  deviceType = 'ble';
+                } else if (device.address && device.address.match(/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/)) {
+                  // Classic Bluetooth uses MAC address format
+                  deviceType = 'classic';
+                }
+                
+                const deviceInfo: PrinterDevice = {
+                  name: device.name || device.deviceName || 'Unknown Printer',
+                  address: device.address || device.macAddress || device.id,
+                  type: deviceType,
+                  rssi: device.rssi || device.signalStrength,
+                };
+                
+                console.log('[ThermalPrinter] Adding device:', deviceInfo);
+                devices.push(deviceInfo);
+              }
+            }
+          });
         });
 
+        console.log('[ThermalPrinter] Starting Bluetooth scan...');
+        
         // Start scanning
         await CapacitorThermalPrinter.startScan();
         
-        // Stop scan after 5 seconds and resolve with found devices
-        setTimeout(async () => {
+        // Extended scan time to 10 seconds for better device discovery
+        scanTimeout = setTimeout(async () => {
+          console.log('[ThermalPrinter] Scan timeout reached, found', devices.length, 'devices');
+          
           try {
             await CapacitorThermalPrinter.stopScan();
           } catch (e) {
-            // Ignore stop errors
+            console.warn('[ThermalPrinter] Error stopping scan:', e);
           }
-          if (listenerHandle) {
-            listenerHandle.remove();
-          }
+          
+          cleanup();
           resolve(devices);
-        }, 5000);
+        }, 10000); // Increased from 5s to 10s
+        
       } catch (error) {
-        if (listenerHandle) {
-          listenerHandle.remove();
-        }
+        console.error('[ThermalPrinter] Scan error:', error);
+        cleanup();
         reject(new Error('Failed to scan for Bluetooth printers'));
       }
     });
@@ -102,10 +296,13 @@ class ThermalPrinterService {
     }
 
     try {
+      console.log('[ThermalPrinter] Connecting to device:', device);
       await CapacitorThermalPrinter.connect({ address: device.address });
       this.connectedDevice = device;
+      console.log('[ThermalPrinter] Successfully connected to:', device.name);
     } catch (error) {
-      console.error('Failed to connect to printer:', error);
+      console.error('[ThermalPrinter] Failed to connect to printer:', error);
+      this.connectedDevice = null;
       throw new Error(`Failed to connect to ${device.name}`);
     }
   }
@@ -123,6 +320,25 @@ class ThermalPrinterService {
 
   getConnectedDevice(): PrinterDevice | null {
     return this.connectedDevice;
+  }
+
+  async openAppSettings(): Promise<void> {
+    if (!this.isNative) {
+      console.warn('[ThermalPrinter] Cannot open app settings on non-native platform');
+      return;
+    }
+
+    try {
+      // Try to open app settings if the plugin supports it
+      if (typeof CapacitorThermalPrinter.openSettings === 'function') {
+        await CapacitorThermalPrinter.openSettings();
+      } else {
+        console.log('[ThermalPrinter] Plugin does not support opening settings');
+        console.log('[ThermalPrinter] Please manually go to: Settings > Apps > TableFlow Pro > Permissions');
+      }
+    } catch (error) {
+      console.error('[ThermalPrinter] Failed to open app settings:', error);
+    }
   }
 
   async printViaBluetooth(bill: BillData): Promise<void> {
