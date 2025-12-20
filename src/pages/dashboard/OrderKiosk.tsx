@@ -1661,20 +1661,20 @@ export default function OrderKiosk() {
             </div>
 
             {/* Print Options */}
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => handlePrintBill(false)} disabled={printing}>
+            <div className="flex flex-col gap-2">
+              <Button variant="outline" className="w-full" onClick={() => handlePrintBill(false)} disabled={printing}>
                 <Printer className="w-4 h-4 mr-2" />
                 Browser Print
               </Button>
               {isBluetoothAvailable && (
                 <Button 
                   variant={connectedDevice ? "default" : "outline"}
-                  className={`flex-1 ${connectedDevice ? 'bg-success hover:bg-success/90 text-white' : ''}`}
+                  className={`w-full ${connectedDevice ? 'bg-success hover:bg-success/90 text-white' : ''}`}
                   onClick={() => connectedDevice ? handlePrintBill(true) : setPrinterSelectorOpen(true)}
                   disabled={printing}
                 >
                   <Bluetooth className="w-4 h-4 mr-2" />
-                  {connectedDevice ? `Print via ${connectedDevice.name}` : 'Connect Printer'}
+                  <span className="truncate">{connectedDevice ? `Print via ${connectedDevice.name}` : 'Connect Printer'}</span>
                 </Button>
               )}
             </div>
