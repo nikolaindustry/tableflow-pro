@@ -314,11 +314,17 @@ export default function Reports() {
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
       const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+      const searchLower = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm || 
+        // Search by order ID (both full UUID and displayed 8-char version)
+        order.id.toLowerCase().includes(searchLower) ||
+        order.id.slice(0, 8).toLowerCase().includes(searchLower) ||
+        // Search by menu item names
         order.order_items.some(item => 
-          item.menu_item?.name.toLowerCase().includes(searchTerm.toLowerCase())
+          item.menu_item?.name.toLowerCase().includes(searchLower)
         ) ||
-        order.table?.table_number.toLowerCase().includes(searchTerm.toLowerCase());
+        // Search by table number
+        order.table?.table_number.toLowerCase().includes(searchLower);
       return matchesStatus && matchesSearch;
     });
   }, [orders, statusFilter, searchTerm]);
@@ -972,7 +978,7 @@ export default function Reports() {
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="relative flex-1">
                 <Input
-                  placeholder="Search orders by item or table..."
+                  placeholder="Search by order ID, item, or table..."
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
