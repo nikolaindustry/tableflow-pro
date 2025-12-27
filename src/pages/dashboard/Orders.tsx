@@ -387,6 +387,7 @@ export default function Orders() {
       restaurantPhone: currentRestaurant.phone,
       restaurantGstin: currentRestaurant.gstin,
       tableNumber: billingOrder.table?.table_number,
+      orderId: billingOrder.id, // Order ID for barcode on receipt
       items: billingOrder.order_items.map(item => ({
         name: item.menu_item?.name || 'Item',
         quantity: item.quantity,

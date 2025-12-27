@@ -14,6 +14,7 @@ export interface BillData {
   restaurantPhone?: string | null;
   restaurantGstin?: string | null;
   tableNumber?: string;
+  orderId?: string; // Order ID for barcode printing
   items: {
     name: string;
     quantity: number;
@@ -378,18 +379,25 @@ class ThermalPrinterService {
       printer
         .text('--------------------------------\n')
         .align('left')
-        .text(`Table: ${bill.tableNumber || 'Takeaway'}\n`)
+        .text(`Table: ${bill.tableNumber || 'Takeaway'}\n`);
+      
+      // Add Order ID if available
+      if (bill.orderId) {
+        printer.text(`Order: #${bill.orderId.substring(0, 8)}\n`);
+      }
+      
+      printer
         .text(`Date: ${billDate}\n`)
         .text('--------------------------------\n')
         .bold()
-        .text('Item              Qty    Amount\n')
+        .text('Item           Qty     Amt\n')
         .clearFormatting()
         .text('--------------------------------\n');
 
       for (const item of bill.items) {
-        const itemName = item.name.substring(0, 16).padEnd(16);
+        const itemName = item.name.substring(0, 14).padEnd(14);
         const qty = String(item.quantity).padStart(3);
-        const amount = `Rs.${(item.price * item.quantity).toFixed(0)}`.padStart(8);
+        const amount = `Rs.${(item.price * item.quantity).toFixed(0)}`.padStart(9);
         printer.text(`${itemName}${qty}${amount}\n`);
       }
 
@@ -402,7 +410,19 @@ class ThermalPrinterService {
         .align('center')
         .text('\n')
         .text('Thank you for dining with us!\n')
-        .text('Please visit again\n')
+        .text('Please visit again\n');
+      
+      // Print Order ID barcode if available
+      if (bill.orderId) {
+        const barcodeType: 'CODE128' = 'CODE128';
+        printer
+          .text('\n')
+          .align('center')
+          .barcode(bill.orderId.substring(0, 12), barcodeType)
+          .text(`#${bill.orderId.substring(0, 8)}\n`);
+      }
+      
+      await printer
         .text('\n\n\n')
         .cutPaper()
         .write();

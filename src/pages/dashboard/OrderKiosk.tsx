@@ -785,6 +785,7 @@ export default function OrderKiosk() {
       restaurantPhone: currentRestaurant.phone,
       restaurantGstin: currentRestaurant.gstin,
       tableNumber: selectedTable.table_number,
+      orderId: activeOrder.id, // Order ID for barcode on receipt
       items: activeOrder.items.map(item => ({
         name: item.menu_item?.name || 'Item',
         quantity: item.quantity,
