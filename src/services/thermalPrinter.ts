@@ -407,7 +407,8 @@ class ThermalPrinterService {
         printer.text(`${itemName}${qty}${amount}\n`);
       }
 
-      await printer
+      // Add total and footer
+      printer
         .text('--------------------------------\n')
         .bold()
         .align('right')
@@ -420,18 +421,27 @@ class ThermalPrinterService {
       
       // Print Order ID barcode if available
       if (bill.orderId) {
-        const barcodeType: 'CODE128' = 'CODE128';
+        console.log('[ThermalPrinter] Adding barcode for order:', bill.orderId.substring(0, 8));
         printer
           .text('\n')
-          .align('center')
-          .barcode(bill.orderId.substring(0, 12), barcodeType)
-          .text(`#${bill.orderId.substring(0, 8)}\n`);
+          .align('center');
+        
+        // Try to add barcode - some printers may not support it
+        try {
+          const barcodeType: 'CODE128' = 'CODE128';
+          printer.barcode(bill.orderId.substring(0, 12), barcodeType);
+        } catch (barcodeError) {
+          console.warn('[ThermalPrinter] Barcode not supported, skipping:', barcodeError);
+        }
+        
+        printer.text(`#${bill.orderId.substring(0, 8)}\n`);
       }
       
-      await printer
-        .text('\n\n\n')
-        .cutPaper()
-        .write();
+      // Final feed and cut - this is the only await needed
+      printer.text('\n\n\n').cutPaper();
+      
+      console.log('[ThermalPrinter] Sending print job to device...');
+      await printer.write();
       
       console.log('[ThermalPrinter] Print job sent successfully');
     } catch (error) {
