@@ -419,22 +419,45 @@ class ThermalPrinterService {
         .text('Thank you for dining with us!\n')
         .text('Please visit again\n');
       
-      // Print Order ID barcode if available
+      // Print Order ID with QR code (preferred) or barcode (fallback)
       if (bill.orderId) {
-        console.log('[ThermalPrinter] Adding barcode for order:', bill.orderId.substring(0, 8));
+        console.log('[ThermalPrinter] Adding order ID code:', bill.orderId.substring(0, 8));
         printer
           .text('\n')
-          .align('center');
+          .align('center')
+          .text('Scan to view order:\n');
         
-        // Try to add barcode - some printers may not support it
+        let qrPrinted = false;
+        let barcodePrinted = false;
+        
+        // Try QR code first - more scannable and holds more data
         try {
-          const barcodeType: 'CODE128' = 'CODE128';
-          printer.barcode(bill.orderId.substring(0, 12), barcodeType);
-        } catch (barcodeError) {
-          console.warn('[ThermalPrinter] Barcode not supported, skipping:', barcodeError);
+          // QR code can contain the full order ID for lookup
+          (printer as any).qr(bill.orderId);
+          qrPrinted = true;
+          console.log('[ThermalPrinter] QR code added successfully');
+        } catch (qrError) {
+          console.warn('[ThermalPrinter] QR code not supported, trying barcode fallback:', qrError);
         }
         
-        printer.text(`#${bill.orderId.substring(0, 8)}\n`);
+        // If QR code failed, try barcode as fallback
+        if (!qrPrinted) {
+          try {
+            const barcodeType: 'CODE128' = 'CODE128';
+            printer.barcode(bill.orderId.substring(0, 12), barcodeType);
+            barcodePrinted = true;
+            console.log('[ThermalPrinter] Barcode added as fallback');
+          } catch (barcodeError) {
+            console.warn('[ThermalPrinter] Barcode also not supported:', barcodeError);
+          }
+        }
+        
+        // Always print the order ID text as human-readable reference
+        printer.text(`\nOrder: #${bill.orderId.substring(0, 8)}\n`);
+        
+        if (!qrPrinted && !barcodePrinted) {
+          console.log('[ThermalPrinter] Neither QR nor barcode supported, using text only');
+        }
       }
       
       // Final feed and cut - this is the only await needed
