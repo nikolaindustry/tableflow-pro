@@ -53,11 +53,20 @@ export function useThermalPrinter() {
   const printBill = useCallback(async (bill: BillData, useBluetooth: boolean = false) => {
     setPrinting(true);
     try {
-      if (useBluetooth && isBluetoothAvailable) {
+      if (useBluetooth) {
+        if (!isBluetoothAvailable) {
+          throw new Error('Bluetooth printing is not available on this device');
+        }
+        console.log('[useThermalPrinter] Printing via Bluetooth...');
         await thermalPrinter.printViaBluetooth(bill);
+        console.log('[useThermalPrinter] Bluetooth print completed successfully');
       } else {
+        console.log('[useThermalPrinter] Printing via browser...');
         thermalPrinter.printViaBrowser(bill);
       }
+    } catch (error) {
+      console.error('[useThermalPrinter] Print failed:', error);
+      throw error; // Re-throw so caller can handle it
     } finally {
       setPrinting(false);
     }

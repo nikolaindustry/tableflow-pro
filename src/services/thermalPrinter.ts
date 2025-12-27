@@ -343,13 +343,19 @@ class ThermalPrinterService {
   }
 
   async printViaBluetooth(bill: BillData): Promise<void> {
+    console.log('[ThermalPrinter] printViaBluetooth called');
+    
     if (!this.isNative) {
+      console.error('[ThermalPrinter] Not running on native platform');
       throw new Error('Bluetooth printing is only available on mobile devices');
     }
 
     if (!this.connectedDevice) {
+      console.error('[ThermalPrinter] No printer connected');
       throw new Error('No printer connected. Please connect a printer first.');
     }
+
+    console.log('[ThermalPrinter] Printing to device:', this.connectedDevice.name);
 
     const billDate = new Date().toLocaleString('en-IN', {
       dateStyle: 'medium',
@@ -426,9 +432,11 @@ class ThermalPrinterService {
         .text('\n\n\n')
         .cutPaper()
         .write();
+      
+      console.log('[ThermalPrinter] Print job sent successfully');
     } catch (error) {
-      console.error('Bluetooth print failed:', error);
-      throw new Error('Failed to print via Bluetooth');
+      console.error('[ThermalPrinter] Bluetooth print failed:', error);
+      throw new Error(`Failed to print via Bluetooth: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
