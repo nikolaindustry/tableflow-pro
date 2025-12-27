@@ -389,7 +389,7 @@ class ThermalPrinterService {
       for (const item of bill.items) {
         const itemName = item.name.substring(0, 16).padEnd(16);
         const qty = String(item.quantity).padStart(3);
-        const amount = `₹${(item.price * item.quantity).toFixed(0)}`.padStart(8);
+        const amount = `Rs.${(item.price * item.quantity).toFixed(0)}`.padStart(8);
         printer.text(`${itemName}${qty}${amount}\n`);
       }
 
@@ -397,7 +397,7 @@ class ThermalPrinterService {
         .text('--------------------------------\n')
         .bold()
         .align('right')
-        .text(`Grand Total: ₹${bill.total.toFixed(2)}\n`)
+        .text(`Grand Total: Rs.${bill.total.toFixed(2)}\n`)
         .clearFormatting()
         .align('center')
         .text('\n')
