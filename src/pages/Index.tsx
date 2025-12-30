@@ -47,7 +47,7 @@ const Index = () => {
             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
               <ChefHat className="h-6 w-6 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold text-foreground">RestroFlow</span>
+            <span className="text-xl font-bold text-foreground">Supreme Pos</span>
           </div>
           <div className="flex items-center gap-4">
             {loading ? null : user ? (
@@ -78,7 +78,7 @@ const Index = () => {
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
               Streamline Your Restaurant Operations with{" "}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">
-                RestroFlow
+                Supreme Pos
               </span>
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
@@ -137,7 +137,7 @@ const Index = () => {
                 Built for Indian Restaurants
               </h2>
               <p className="text-muted-foreground text-lg mb-8">
-                RestroFlow understands the unique needs of Indian restaurants. 
+                Supreme Pos understands the unique needs of Indian restaurants. 
                 From veg/non-veg indicators to spice level management, 
                 we've got you covered.
               </p>
@@ -154,7 +154,7 @@ const Index = () => {
               <div className="aspect-square bg-gradient-to-br from-primary/20 to-accent/20 rounded-3xl flex items-center justify-center">
                 <div className="text-center p-8">
                   <ChefHat className="h-24 w-24 text-primary mx-auto mb-4" />
-                  <p className="text-2xl font-bold text-foreground">RestroFlow</p>
+                  <p className="text-2xl font-bold text-foreground">Supreme Pos</p>
                   <p className="text-muted-foreground">Restaurant Management Made Simple</p>
                 </div>
               </div>
@@ -170,7 +170,7 @@ const Index = () => {
             Ready to Transform Your Restaurant?
           </h2>
           <p className="text-primary-foreground/80 text-lg mb-8 max-w-2xl mx-auto">
-            Join hundreds of restaurant owners who trust RestroFlow for their daily operations.
+            Join hundreds of restaurant owners who trust Supreme Pos for their daily operations.
           </p>
           <Button asChild size="lg" variant="secondary" className="text-lg px-8">
             <Link to="/auth">
@@ -184,7 +184,7 @@ const Index = () => {
       {/* Footer */}
       <footer className="py-8 border-t border-border">
         <div className="container mx-auto px-4 text-center text-muted-foreground">
-          <p>© 2024 RestroFlow. Built for Indian Restaurants.</p>
+          <p>© 2024 Supreme Pos. Built for Indian Restaurants.</p>
         </div>
       </footer>
     </div>

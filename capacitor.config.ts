@@ -2,7 +2,7 @@ import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.tableflowpro.app',
-  appName: 'TableFlow Pro',
+  appName: 'Supreme Pos',
   webDir: 'dist',
   server: {
     androidScheme: 'https'

@@ -70,7 +70,7 @@ export default function Auth() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-primary shadow-glow mb-4">
             <UtensilsCrossed className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-foreground">RestroFlow</h1>
+          <h1 className="text-3xl font-bold text-foreground">Supreme Pos</h1>
           <p className="text-muted-foreground mt-2">Restaurant Management Made Simple</p>
         </div>
 
