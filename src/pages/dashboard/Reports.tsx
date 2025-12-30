@@ -40,11 +40,15 @@ import {
   FileText,
   Download,
   FileSpreadsheet,
-  Printer
+  Printer,
+  Bluetooth
 } from 'lucide-react';
 import { format, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO, eachDayOfInterval, eachHourOfInterval, addHours } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useThermalPrinter } from '@/hooks/useThermalPrinter';
+import { PrinterSelector } from '@/components/PrinterSelector';
+import { BillData } from '@/services/thermalPrinter';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -106,7 +110,12 @@ export default function Reports() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [exporting, setExporting] = useState(false);
+  const [printerSelectorOpen, setPrinterSelectorOpen] = useState(false);
+  const [selectedOrderForPrint, setSelectedOrderForPrint] = useState<Order | null>(null);
   const ordersPerPage = 10;
+
+  // Thermal printer hook
+  const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing } = useThermalPrinter();
 
   // Calculate date range
   const getDateRange = useMemo(() => {
@@ -305,11 +314,17 @@ export default function Reports() {
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
       const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+      const searchLower = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm || 
+        // Search by order ID (both full UUID and displayed 8-char version)
+        order.id.toLowerCase().includes(searchLower) ||
+        order.id.slice(0, 8).toLowerCase().includes(searchLower) ||
+        // Search by menu item names
         order.order_items.some(item => 
-          item.menu_item?.name.toLowerCase().includes(searchTerm.toLowerCase())
+          item.menu_item?.name.toLowerCase().includes(searchLower)
         ) ||
-        order.table?.table_number.toLowerCase().includes(searchTerm.toLowerCase());
+        // Search by table number
+        order.table?.table_number.toLowerCase().includes(searchLower);
       return matchesStatus && matchesSearch;
     });
   }, [orders, statusFilter, searchTerm]);
@@ -483,6 +498,118 @@ export default function Reports() {
       setExporting(false);
     }
   }, [currentRestaurant, orders, filteredOrders, stats, popularItems, getDateRange, toast]);
+
+  // Generate bill data from an order for thermal printing
+  const getBillDataFromOrder = useCallback((order: Order): BillData | null => {
+    if (!currentRestaurant) return null;
+    
+    return {
+      restaurantName: currentRestaurant.name,
+      restaurantAddress: currentRestaurant.address,
+      restaurantPhone: currentRestaurant.phone,
+      restaurantGstin: currentRestaurant.gstin,
+      tableNumber: order.table?.table_number,
+      orderId: order.id,
+      items: order.order_items.map(item => ({
+        name: item.menu_item?.name || 'Unknown Item',
+        quantity: item.quantity,
+        price: Number(item.unit_price),
+      })),
+      total: Number(order.total_amount),
+    };
+  }, [currentRestaurant]);
+
+  // Handle thermal printing for an order
+  const handlePrintOrder = useCallback(async (order: Order, useBluetooth: boolean = false) => {
+    const billData = getBillDataFromOrder(order);
+    if (!billData) {
+      toast({ title: 'Unable to generate bill data', variant: 'destructive' });
+      return;
+    }
+    
+    try {
+      await printThermal(billData, useBluetooth);
+      if (useBluetooth) {
+        toast({ title: 'Receipt printed via Bluetooth' });
+      }
+    } catch (error: any) {
+      toast({ title: error.message || 'Print failed', variant: 'destructive' });
+    }
+  }, [getBillDataFromOrder, printThermal, toast]);
+
+  // Browser print for an order (existing functionality refactored)
+  const handleBrowserPrint = useCallback((order: Order) => {
+    const printWindow = window.open('', '_blank', 'width=300,height=600');
+    if (!printWindow) {
+      toast({ title: 'Please allow popups to print', variant: 'destructive' });
+      return;
+    }
+    
+    const itemsHtml = order.order_items.map(item => `
+      <tr>
+        <td style="text-align:left;padding:2px 0;">${item.menu_item?.name || 'Unknown'}</td>
+        <td style="text-align:center;padding:2px 4px;">${item.quantity}</td>
+        <td style="text-align:right;padding:2px 0;">Rs.${(item.quantity * Number(item.unit_price)).toLocaleString()}</td>
+      </tr>
+    `).join('');
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Receipt</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Courier New', monospace; font-size: 12px; width: 80mm; padding: 5mm; }
+          .header { text-align: center; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 10px; }
+          .header h1 { font-size: 16px; margin-bottom: 5px; }
+          .info { margin-bottom: 10px; }
+          .info p { margin: 2px 0; }
+          table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+          .divider { border-top: 1px dashed #000; margin: 10px 0; }
+          .total { font-weight: bold; font-size: 14px; text-align: right; }
+          .footer { text-align: center; margin-top: 15px; font-size: 10px; }
+          @media print { body { width: 80mm; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${currentRestaurant?.name || 'Restaurant'}</h1>
+          ${currentRestaurant?.address ? `<p>${currentRestaurant.address}</p>` : ''}
+          ${currentRestaurant?.phone ? `<p>Tel: ${currentRestaurant.phone}</p>` : ''}
+        </div>
+        <div class="info">
+          <p><strong>Order #${order.id.slice(0, 8).toUpperCase()}</strong></p>
+          <p>Date: ${format(parseISO(order.created_at), 'dd/MM/yyyy HH:mm')}</p>
+          ${order.table ? `<p>Table: ${order.table.table_number}</p>` : ''}
+        </div>
+        <div class="divider"></div>
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align:left;">Item</th>
+              <th style="text-align:center;">Qty</th>
+              <th style="text-align:right;">Amt</th>
+            </tr>
+          </thead>
+          <tbody>${itemsHtml}</tbody>
+        </table>
+        <div class="divider"></div>
+        <p class="total">TOTAL: Rs.${Number(order.total_amount).toLocaleString()}</p>
+        <div class="footer">
+          <p>Thank you for dining with us!</p>
+          ${currentRestaurant?.gstin ? `<p>GSTIN: ${currentRestaurant.gstin}</p>` : ''}
+        </div>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  }, [currentRestaurant, toast]);
 
   if (!currentRestaurant) {
     return (
@@ -851,7 +978,7 @@ export default function Reports() {
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="relative flex-1">
                 <Input
-                  placeholder="Search orders by item or table..."
+                  placeholder="Search by order ID, item, or table..."
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
@@ -929,86 +1056,53 @@ export default function Reports() {
                               <p className="text-lg font-bold text-primary">
                                 ₹{Number(order.total_amount).toLocaleString()}
                               </p>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                title="Print Receipt (Thermal)"
-                                onClick={() => {
-                                  const printWindow = window.open('', '_blank', 'width=300,height=600');
-                                  if (!printWindow) {
-                                    toast({ title: 'Please allow popups to print', variant: 'destructive' });
-                                    return;
-                                  }
-                                  
-                                  const itemsHtml = order.order_items.map(item => `
-                                    <tr>
-                                      <td style="text-align:left;padding:2px 0;">${item.menu_item?.name || 'Unknown'}</td>
-                                      <td style="text-align:center;padding:2px 4px;">${item.quantity}</td>
-                                      <td style="text-align:right;padding:2px 0;">₹${(item.quantity * Number(item.unit_price)).toLocaleString()}</td>
-                                    </tr>
-                                  `).join('');
-                                  
-                                  printWindow.document.write(`
-                                    <!DOCTYPE html>
-                                    <html>
-                                    <head>
-                                      <title>Receipt</title>
-                                      <style>
-                                        * { margin: 0; padding: 0; box-sizing: border-box; }
-                                        body { font-family: 'Courier New', monospace; font-size: 12px; width: 80mm; padding: 5mm; }
-                                        .header { text-align: center; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 10px; }
-                                        .header h1 { font-size: 16px; margin-bottom: 5px; }
-                                        .info { margin-bottom: 10px; }
-                                        .info p { margin: 2px 0; }
-                                        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-                                        .divider { border-top: 1px dashed #000; margin: 10px 0; }
-                                        .total { font-weight: bold; font-size: 14px; text-align: right; }
-                                        .footer { text-align: center; margin-top: 15px; font-size: 10px; }
-                                        @media print { body { width: 80mm; } }
-                                      </style>
-                                    </head>
-                                    <body>
-                                      <div class="header">
-                                        <h1>${currentRestaurant?.name || 'Restaurant'}</h1>
-                                        ${currentRestaurant?.address ? `<p>${currentRestaurant.address}</p>` : ''}
-                                        ${currentRestaurant?.phone ? `<p>Tel: ${currentRestaurant.phone}</p>` : ''}
-                                      </div>
-                                      <div class="info">
-                                        <p><strong>Order #${order.id.slice(0, 8).toUpperCase()}</strong></p>
-                                        <p>Date: ${format(parseISO(order.created_at), 'dd/MM/yyyy HH:mm')}</p>
-                                        ${order.table ? `<p>Table: ${order.table.table_number}</p>` : ''}
-                                      </div>
-                                      <div class="divider"></div>
-                                      <table>
-                                        <thead>
-                                          <tr>
-                                            <th style="text-align:left;">Item</th>
-                                            <th style="text-align:center;">Qty</th>
-                                            <th style="text-align:right;">Amt</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>${itemsHtml}</tbody>
-                                      </table>
-                                      <div class="divider"></div>
-                                      <p class="total">TOTAL: ₹${Number(order.total_amount).toLocaleString()}</p>
-                                      <div class="footer">
-                                        <p>Thank you for dining with us!</p>
-                                        ${currentRestaurant?.gstin ? `<p>GSTIN: ${currentRestaurant.gstin}</p>` : ''}
-                                      </div>
-                                    </body>
-                                    </html>
-                                  `);
-                                  printWindow.document.close();
-                                  printWindow.focus();
-                                  setTimeout(() => {
-                                    printWindow.print();
-                                    printWindow.close();
-                                  }, 250);
-                                }}
-                              >
-                                <Printer className="w-4 h-4" />
-                              </Button>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    title="Print Receipt"
+                                    disabled={printing}
+                                  >
+                                    <Printer className="w-4 h-4" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-48 p-2" align="end">
+                                  <div className="space-y-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="w-full justify-start"
+                                      onClick={() => handleBrowserPrint(order)}
+                                    >
+                                      <Printer className="w-4 h-4 mr-2" />
+                                      Browser Print
+                                    </Button>
+                                    {isBluetoothAvailable && (
+                                      <Button
+                                        variant={connectedDevice ? "default" : "ghost"}
+                                        size="sm"
+                                        className={`w-full justify-start ${connectedDevice ? 'bg-success hover:bg-success/90 text-white' : ''}`}
+                                        onClick={() => {
+                                          if (connectedDevice) {
+                                            handlePrintOrder(order, true);
+                                          } else {
+                                            setSelectedOrderForPrint(order);
+                                            setPrinterSelectorOpen(true);
+                                          }
+                                        }}
+                                        disabled={printing}
+                                      >
+                                        <Bluetooth className="w-4 h-4 mr-2" />
+                                        <span className="truncate">
+                                          {connectedDevice ? `Print via ${connectedDevice.name}` : 'Connect Printer'}
+                                        </span>
+                                      </Button>
+                                    )}
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
                             </div>
                           </div>
                           
@@ -1061,6 +1155,21 @@ export default function Reports() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Printer Selector Dialog */}
+        <PrinterSelector 
+          open={printerSelectorOpen} 
+          onOpenChange={(open) => {
+            setPrinterSelectorOpen(open);
+            if (!open) {
+              // After closing the printer selector, if a device is connected and we have a pending order, print it
+              if (connectedDevice && selectedOrderForPrint) {
+                handlePrintOrder(selectedOrderForPrint, true);
+                setSelectedOrderForPrint(null);
+              }
+            }
+          }} 
+        />
       </div>
     </DashboardLayout>
   );

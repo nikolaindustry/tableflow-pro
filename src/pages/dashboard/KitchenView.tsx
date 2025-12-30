@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from 'sonner';
 import {
   ChefHat,
@@ -20,10 +21,14 @@ import {
   Volume2,
   VolumeX,
   Printer,
+  Bluetooth,
 } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useThermalPrinter } from '@/hooks/useThermalPrinter';
+import { PrinterSelector } from '@/components/PrinterSelector';
+import { BillData } from '@/services/thermalPrinter';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
 type FoodType = Database['public']['Enums']['food_type'];
@@ -81,8 +86,13 @@ export default function KitchenView() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [printerSelectorOpen, setPrinterSelectorOpen] = useState(false);
+  const [selectedOrderForPrint, setSelectedOrderForPrint] = useState<Order | null>(null);
   const isMobile = useIsMobile();
   const audioContextRef = useRef<AudioContext | null>(null);
+
+  // Thermal printer hook
+  const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing } = useThermalPrinter();
 
   const playNotificationSound = useCallback(() => {
     if (!soundEnabled) return;
@@ -368,6 +378,39 @@ export default function KitchenView() {
     printWindow.document.close();
   };
 
+  // Generate BillData for thermal kitchen ticket (items only, no prices)
+  const getKitchenTicketData = useCallback((order: Order): BillData | null => {
+    if (!currentRestaurant) return null;
+    
+    return {
+      restaurantName: `KITCHEN - ${currentRestaurant.name}`,
+      tableNumber: order.table ? order.table.table_number : 'TAKEAWAY',
+      orderId: order.id,
+      items: order.order_items.map(item => ({
+        name: `${item.menu_item?.food_type === 'veg' ? '[V]' : '[NV]'} ${item.menu_item?.name || 'Unknown'}`,
+        quantity: item.quantity,
+        price: 0, // Kitchen tickets don't show prices
+      })),
+      total: 0, // Kitchen tickets don't show total
+    };
+  }, [currentRestaurant]);
+
+  // Handle thermal printing for kitchen ticket
+  const handleThermalPrint = useCallback(async (order: Order) => {
+    const ticketData = getKitchenTicketData(order);
+    if (!ticketData) {
+      toast.error('Unable to generate ticket data');
+      return;
+    }
+    
+    try {
+      await printThermal(ticketData, true);
+      toast.success('Kitchen ticket printed via Bluetooth');
+    } catch (error: any) {
+      toast.error(error.message || 'Print failed');
+    }
+  }, [getKitchenTicketData, printThermal]);
+
   const renderFoodTypeIcon = (type: FoodType) => (
     <span className={type === 'veg' ? 'text-success' : 'text-destructive'}>
       {type === 'veg' ? <Leaf className="w-4 h-4" /> : <Drumstick className="w-4 h-4" />}
@@ -447,15 +490,53 @@ export default function KitchenView() {
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7"
-                          onClick={() => printKitchenTicket(order)}
-                          title="Print ticket"
-                        >
-                          <Printer className="w-3 h-3" />
-                        </Button>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7"
+                              title="Print ticket"
+                              disabled={printing}
+                            >
+                              <Printer className="w-3 h-3" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-48 p-2" align="end">
+                            <div className="space-y-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start"
+                                onClick={() => printKitchenTicket(order)}
+                              >
+                                <Printer className="w-4 h-4 mr-2" />
+                                Browser Print
+                              </Button>
+                              {isBluetoothAvailable && (
+                                <Button
+                                  variant={connectedDevice ? "default" : "ghost"}
+                                  size="sm"
+                                  className={`w-full justify-start ${connectedDevice ? 'bg-success hover:bg-success/90 text-white' : ''}`}
+                                  onClick={() => {
+                                    if (connectedDevice) {
+                                      handleThermalPrint(order);
+                                    } else {
+                                      setSelectedOrderForPrint(order);
+                                      setPrinterSelectorOpen(true);
+                                    }
+                                  }}
+                                  disabled={printing}
+                                >
+                                  <Bluetooth className="w-4 h-4 mr-2" />
+                                  <span className="truncate text-xs">
+                                    {connectedDevice ? `${connectedDevice.name}` : 'Connect Printer'}
+                                  </span>
+                                </Button>
+                              )}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                         <div className="flex items-center gap-1 text-muted-foreground text-xs">
                           <Timer className="w-3 h-3" />
                           {getTimeSinceOrder(order.created_at)}
@@ -661,6 +742,21 @@ export default function KitchenView() {
             )}
           </div>
         )}
+
+        {/* Printer Selector Dialog */}
+        <PrinterSelector 
+          open={printerSelectorOpen} 
+          onOpenChange={(open) => {
+            setPrinterSelectorOpen(open);
+            if (!open) {
+              // After closing, if connected and order selected, print it
+              if (connectedDevice && selectedOrderForPrint) {
+                handleThermalPrint(selectedOrderForPrint);
+                setSelectedOrderForPrint(null);
+              }
+            }
+          }} 
+        />
       </div>
     </DashboardLayout>
   );

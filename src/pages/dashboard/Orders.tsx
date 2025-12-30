@@ -387,6 +387,7 @@ export default function Orders() {
       restaurantPhone: currentRestaurant.phone,
       restaurantGstin: currentRestaurant.gstin,
       tableNumber: billingOrder.table?.table_number,
+      orderId: billingOrder.id, // Order ID for barcode on receipt
       items: billingOrder.order_items.map(item => ({
         name: item.menu_item?.name || 'Item',
         quantity: item.quantity,
@@ -970,20 +971,20 @@ export default function Orders() {
               </div>
 
               {/* Print Options */}
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" onClick={() => handlePrintBill(false)} disabled={printing}>
+              <div className="flex flex-col gap-2">
+                <Button variant="outline" className="w-full" onClick={() => handlePrintBill(false)} disabled={printing}>
                   <Printer className="w-4 h-4 mr-2" />
                   Browser Print
                 </Button>
                 {isBluetoothAvailable && (
                   <Button 
-                    variant="outline" 
-                    className={`flex-1 ${connectedDevice ? 'border-success text-success' : ''}`}
+                    variant={connectedDevice ? "default" : "outline"}
+                    className={`w-full ${connectedDevice ? 'bg-success hover:bg-success/90 text-white' : ''}`}
                     onClick={() => connectedDevice ? handlePrintBill(true) : setPrinterSelectorOpen(true)}
                     disabled={printing}
                   >
                     <Bluetooth className="w-4 h-4 mr-2" />
-                    {connectedDevice ? 'Thermal Print' : 'Connect Printer'}
+                    <span className="truncate">{connectedDevice ? `Print via ${connectedDevice.name}` : 'Connect Printer'}</span>
                   </Button>
                 )}
               </div>

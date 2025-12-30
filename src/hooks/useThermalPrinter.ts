@@ -14,6 +14,16 @@ export function useThermalPrinter() {
     setConnectedDevice(thermalPrinter.getConnectedDevice());
   }, []);
 
+  // Poll for connected device status to keep UI in sync
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const device = thermalPrinter.getConnectedDevice();
+      setConnectedDevice(device);
+    }, 1000); // Check every second
+
+    return () => clearInterval(interval);
+  }, []);
+
   const scanDevices = useCallback(async () => {
     setScanning(true);
     try {
@@ -43,15 +53,36 @@ export function useThermalPrinter() {
   const printBill = useCallback(async (bill: BillData, useBluetooth: boolean = false) => {
     setPrinting(true);
     try {
-      if (useBluetooth && isBluetoothAvailable) {
+      if (useBluetooth) {
+        if (!isBluetoothAvailable) {
+          throw new Error('Bluetooth printing is not available on this device');
+        }
+        console.log('[useThermalPrinter] Printing via Bluetooth...');
         await thermalPrinter.printViaBluetooth(bill);
+        console.log('[useThermalPrinter] Bluetooth print completed successfully');
       } else {
+        console.log('[useThermalPrinter] Printing via browser...');
         thermalPrinter.printViaBrowser(bill);
       }
+    } catch (error) {
+      console.error('[useThermalPrinter] Print failed:', error);
+      throw error; // Re-throw so caller can handle it
     } finally {
       setPrinting(false);
     }
   }, [isBluetoothAvailable]);
+
+  const checkPermissions = useCallback(async () => {
+    return await thermalPrinter.checkPermissions();
+  }, []);
+
+  const requestPermissions = useCallback(async () => {
+    return await thermalPrinter.requestBluetoothPermissions();
+  }, []);
+
+  const openSettings = useCallback(async () => {
+    await thermalPrinter.openAppSettings();
+  }, []);
 
   return {
     scanning,
@@ -64,5 +95,8 @@ export function useThermalPrinter() {
     connect,
     disconnect,
     printBill,
+    checkPermissions,
+    requestPermissions,
+    openSettings,
   };
 }
