@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { RestaurantProvider } from "@/contexts/RestaurantContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { useAndroidBackButton } from "@/hooks/useAndroidBackButton";
 import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
 import DashboardHome from "./pages/dashboard/DashboardHome";
@@ -24,6 +25,38 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+// Component to handle Android back button inside BrowserRouter context
+const AppContent = () => {
+  // Initialize Android back button handler
+  useAndroidBackButton();
+
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/auth" element={<Auth />} />
+      <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+      
+      {/* Dashboard routes with restaurant slug */}
+      <Route path="/dashboard" element={<ProtectedRoute><DashboardHome /></ProtectedRoute>} />
+      <Route path="/dashboard/:slug" element={<ProtectedRoute><DashboardHome /></ProtectedRoute>} />
+      <Route path="/dashboard/:slug/kitchens" element={<ProtectedRoute><Kitchens /></ProtectedRoute>} />
+      <Route path="/dashboard/:slug/floors" element={<ProtectedRoute><Floors /></ProtectedRoute>} />
+      <Route path="/dashboard/:slug/menu" element={<ProtectedRoute><Menu /></ProtectedRoute>} />
+      <Route path="/dashboard/:slug/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+      <Route path="/dashboard/:slug/kitchen-view" element={<ProtectedRoute><KitchenView /></ProtectedRoute>} />
+      <Route path="/dashboard/:slug/order-kiosk" element={<ProtectedRoute><OrderKiosk /></ProtectedRoute>} />
+      <Route path="/dashboard/:slug/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+      <Route path="/dashboard/:slug/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
+      <Route path="/dashboard/:slug/staff" element={<ProtectedRoute><Staff /></ProtectedRoute>} />
+      <Route path="/dashboard/:slug/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      <Route path="/dashboard/:slug/data" element={<ProtectedRoute><DataManager /></ProtectedRoute>} />
+      
+      {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -32,29 +65,7 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
-              
-              {/* Dashboard routes with restaurant slug */}
-              <Route path="/dashboard" element={<ProtectedRoute><DashboardHome /></ProtectedRoute>} />
-              <Route path="/dashboard/:slug" element={<ProtectedRoute><DashboardHome /></ProtectedRoute>} />
-              <Route path="/dashboard/:slug/kitchens" element={<ProtectedRoute><Kitchens /></ProtectedRoute>} />
-              <Route path="/dashboard/:slug/floors" element={<ProtectedRoute><Floors /></ProtectedRoute>} />
-              <Route path="/dashboard/:slug/menu" element={<ProtectedRoute><Menu /></ProtectedRoute>} />
-              <Route path="/dashboard/:slug/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
-              <Route path="/dashboard/:slug/kitchen-view" element={<ProtectedRoute><KitchenView /></ProtectedRoute>} />
-              <Route path="/dashboard/:slug/order-kiosk" element={<ProtectedRoute><OrderKiosk /></ProtectedRoute>} />
-              <Route path="/dashboard/:slug/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
-              <Route path="/dashboard/:slug/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
-              <Route path="/dashboard/:slug/staff" element={<ProtectedRoute><Staff /></ProtectedRoute>} />
-              <Route path="/dashboard/:slug/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-              <Route path="/dashboard/:slug/data" element={<ProtectedRoute><DataManager /></ProtectedRoute>} />
-              
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <AppContent />
           </BrowserRouter>
         </RestaurantProvider>
       </AuthProvider>
