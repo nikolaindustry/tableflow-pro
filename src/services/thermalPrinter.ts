@@ -37,6 +37,8 @@ class ThermalPrinterService {
   private connectedDevice: PrinterDevice | null = null;
   private isNative = Capacitor.isNativePlatform();
   private supportsBLE = false; // Track if plugin supports BLE
+  private lastPrintTime = 0; // Track last print time for rate limiting
+  private readonly PRINT_DELAY_MS = 1000; // Minimum delay between prints (1 second)
 
   async isBluetoothAvailable(): Promise<boolean> {
     return this.isNative;
@@ -365,6 +367,15 @@ class ThermalPrinterService {
       throw new Error('No printer connected. Please connect a printer first.');
     }
 
+    // CRITICAL FIX: Add delay between consecutive prints for AT POS HOP-H58 compatibility
+    const now = Date.now();
+    const timeSinceLastPrint = now - this.lastPrintTime;
+    if (timeSinceLastPrint < this.PRINT_DELAY_MS) {
+      const waitTime = this.PRINT_DELAY_MS - timeSinceLastPrint;
+      console.log(`[ThermalPrinter] Waiting ${waitTime}ms before next print job...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+
     console.log('[ThermalPrinter] Printing to device:', this.connectedDevice.name);
 
     // Default print options
@@ -386,6 +397,17 @@ class ThermalPrinterService {
     try {
       // Build the receipt using ESC/POS commands with compact formatting
       const printer = CapacitorThermalPrinter.begin();
+      
+      // CRITICAL FIX: Initialize printer before each print job
+      // This ensures the printer is in a known state and buffers are cleared
+      // Particularly important for AT POS HOP-H58 model
+      try {
+        // ESC @ - Initialize printer (clears buffer and resets to default state)
+        (printer as any).raw([0x1B, 0x40]);
+        console.log('[ThermalPrinter] Printer initialized with ESC @');
+      } catch (initError) {
+        console.warn('[ThermalPrinter] Printer init command not supported, continuing anyway:', initError);
+      }
       
       // Restaurant name (compact header)
       printer
@@ -409,7 +431,7 @@ class ThermalPrinterService {
       }
 
       // Compact separator
-      printer.text('------------------------------\n');
+      printer.text('-----------------------------\n');
       
       // Order details (compact single line)
       printer
@@ -424,11 +446,11 @@ class ThermalPrinterService {
       
       // Items header (compact)
       printer
-        .text('------------------------------\n')
+        .text('-----------------------------\n')
         .bold()
         .text('Item        Qty    Amt\n')
         .clearFormatting()
-        .text('------------------------------\n');
+        .text('-----------------------------\n');
 
       // Items list (compact formatting)
       for (const item of bill.items) {
@@ -440,7 +462,7 @@ class ThermalPrinterService {
 
       // Total (compact)
       printer
-        .text('------------------------------\n')
+        .text('----------------------------\n')
         .bold()
         .align('right')
         .text(`Total: Rs.${bill.total.toFixed(2)}\n`)
@@ -491,7 +513,16 @@ class ThermalPrinterService {
       console.log('[ThermalPrinter] Sending print job...');
       await printer.write();
       
+      // CRITICAL FIX: Update last print time AFTER successful print
+      this.lastPrintTime = Date.now();
+      
       console.log('[ThermalPrinter] Print job sent successfully');
+      
+      // CRITICAL FIX: Add post-print delay for AT POS HOP-H58 compatibility
+      // Some printers need time to process the print job before accepting the next one
+      console.log('[ThermalPrinter] Waiting for printer to finish processing...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
     } catch (error) {
       console.error('[ThermalPrinter] Bluetooth print failed:', error);
       throw new Error(`Failed to print via Bluetooth: ${error instanceof Error ? error.message : 'Unknown error'}`);
