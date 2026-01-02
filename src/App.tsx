@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { RestaurantProvider } from "@/contexts/RestaurantContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
 import Onboarding from "./pages/Onboarding";
 import DashboardHome from "./pages/dashboard/DashboardHome";
 import Kitchens from "./pages/dashboard/Kitchens";
@@ -35,6 +36,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/auth" element={<Auth />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
               
               {/* Dashboard routes with restaurant slug */}

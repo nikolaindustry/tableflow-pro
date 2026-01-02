@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,6 +33,28 @@ export default function Auth() {
     } else {
       toast.success('Welcome back!');
       navigate('/dashboard');
+    }
+    
+    setLoading(false);
+  };
+
+  const handleForgotPassword = async () => {
+    if (!loginEmail) {
+      toast.error('Please enter your email address first');
+      return;
+    }
+
+    setLoading(true);
+    const redirectUrl = `${window.location.origin}/reset-password`;
+    
+    const { error } = await supabase.auth.resetPasswordForEmail(loginEmail, {
+      redirectTo: redirectUrl,
+    });
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success('Password reset email sent! Check your inbox.');
     }
     
     setLoading(false);
@@ -106,7 +129,17 @@ export default function Auth() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="login-password">Password</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="login-password">Password</Label>
+                      <button
+                        type="button"
+                        onClick={handleForgotPassword}
+                        className="text-xs text-primary hover:underline"
+                        disabled={loading}
+                      >
+                        Forgot password?
+                      </button>
+                    </div>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
