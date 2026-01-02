@@ -8,6 +8,15 @@ export interface PrinterDevice {
   rssi?: number; // Signal strength (useful for BLE)
 }
 
+export interface PrintOptions {
+  showQRCode?: boolean; // Show QR code (default: true)
+  showAddress?: boolean; // Show restaurant address (default: true)
+  showPhone?: boolean; // Show phone number (default: true)
+  showGSTIN?: boolean; // Show GSTIN (default: true)
+  showThankYou?: boolean; // Show thank you message (default: true)
+  compactMode?: boolean; // Ultra-compact mode (default: false)
+}
+
 export interface BillData {
   restaurantName: string;
   restaurantAddress?: string | null;
@@ -21,6 +30,7 @@ export interface BillData {
     price: number;
   }[];
   total: number;
+  printOptions?: PrintOptions; // Optional print settings
 }
 
 class ThermalPrinterService {
@@ -357,113 +367,128 @@ class ThermalPrinterService {
 
     console.log('[ThermalPrinter] Printing to device:', this.connectedDevice.name);
 
+    // Default print options
+    const options: PrintOptions = {
+      showQRCode: true,
+      showAddress: true,
+      showPhone: true,
+      showGSTIN: true,
+      showThankYou: true,
+      compactMode: false,
+      ...bill.printOptions,
+    };
+
     const billDate = new Date().toLocaleString('en-IN', {
-      dateStyle: 'medium',
+      dateStyle: 'short',
       timeStyle: 'short',
     });
 
     try {
-      // Build the receipt using ESC/POS commands
-      const printer = CapacitorThermalPrinter.begin()
+      // Build the receipt using ESC/POS commands with compact formatting
+      const printer = CapacitorThermalPrinter.begin();
+      
+      // Restaurant name (compact header)
+      printer
         .align('center')
         .bold()
-        .doubleWidth()
         .text(`${bill.restaurantName}\n`)
-        .clearFormatting()
-        .align('center');
+        .clearFormatting();
 
-      if (bill.restaurantAddress) {
-        printer.text(`${bill.restaurantAddress}\n`);
-      }
-      if (bill.restaurantPhone) {
-        printer.text(`Phone: ${bill.restaurantPhone}\n`);
-      }
-      if (bill.restaurantGstin) {
-        printer.text(`GSTIN: ${bill.restaurantGstin}\n`);
+      // Optional restaurant details (only if not compact mode)
+      if (!options.compactMode) {
+        printer.align('center');
+        if (options.showAddress && bill.restaurantAddress) {
+          printer.text(`${bill.restaurantAddress}\n`);
+        }
+        if (options.showPhone && bill.restaurantPhone) {
+          printer.text(`Ph: ${bill.restaurantPhone}\n`);
+        }
+        if (options.showGSTIN && bill.restaurantGstin) {
+          printer.text(`GSTIN: ${bill.restaurantGstin}\n`);
+        }
       }
 
+      // Compact separator
+      printer.text('--------------------------------\n');
+      
+      // Order details (compact single line)
       printer
-        .text('--------------------------------\n')
         .align('left')
-        .text(`Table: ${bill.tableNumber || 'Takeaway'}\n`);
+        .text(`T:${bill.tableNumber || 'TA'}`);
       
-      // Add Order ID if available
       if (bill.orderId) {
-        printer.text(`Order: #${bill.orderId.substring(0, 8)}\n`);
+        printer.text(` O:#${bill.orderId.substring(0, 8)}`);
       }
       
+      printer.text(` ${billDate}\n`);
+      
+      // Items header (compact)
       printer
-        .text(`Date: ${billDate}\n`)
         .text('--------------------------------\n')
         .bold()
-        .text('Item           Qty     Amt\n')
+        .text('Item        Qty    Amt\n')
         .clearFormatting()
         .text('--------------------------------\n');
 
+      // Items list (compact formatting)
       for (const item of bill.items) {
-        const itemName = item.name.substring(0, 14).padEnd(14);
+        const itemName = item.name.substring(0, 12).padEnd(12);
         const qty = String(item.quantity).padStart(3);
-        const amount = `Rs.${(item.price * item.quantity).toFixed(0)}`.padStart(9);
+        const amount = `${(item.price * item.quantity).toFixed(0)}`.padStart(6);
         printer.text(`${itemName}${qty}${amount}\n`);
       }
 
-      // Add total and footer
+      // Total (compact)
       printer
         .text('--------------------------------\n')
         .bold()
         .align('right')
-        .text(`Grand Total: Rs.${bill.total.toFixed(2)}\n`)
-        .clearFormatting()
-        .align('center')
-        .text('\n')
-        .text('Thank you for dining with us!\n')
-        .text('Please visit again\n');
+        .text(`Total: Rs.${bill.total.toFixed(2)}\n`)
+        .clearFormatting();
       
-      // Print Order ID with QR code (preferred) or barcode (fallback)
-      if (bill.orderId) {
-        console.log('[ThermalPrinter] Adding order ID code:', bill.orderId.substring(0, 8));
+      // Optional thank you message
+      if (options.showThankYou && !options.compactMode) {
         printer
-          .text('\n')
           .align('center')
-          .text('Scan to view order:\n');
+          .text('Thank you!\n');
+      }
+      
+      // Optional QR code for order ID
+      if (bill.orderId && options.showQRCode) {
+        console.log('[ThermalPrinter] Adding order code');
         
         let qrPrinted = false;
         let barcodePrinted = false;
         
-        // Try QR code first - more scannable and holds more data
+        // Try QR code first
         try {
-          // QR code can contain the full order ID for lookup
+          printer.align('center');
           (printer as any).qr(bill.orderId);
           qrPrinted = true;
-          console.log('[ThermalPrinter] QR code added successfully');
+          console.log('[ThermalPrinter] QR code added');
         } catch (qrError) {
-          console.warn('[ThermalPrinter] QR code not supported, trying barcode fallback:', qrError);
-        }
-        
-        // If QR code failed, try barcode as fallback
-        if (!qrPrinted) {
+          // Try barcode as fallback
           try {
             const barcodeType: 'CODE128' = 'CODE128';
             printer.barcode(bill.orderId.substring(0, 12), barcodeType);
             barcodePrinted = true;
-            console.log('[ThermalPrinter] Barcode added as fallback');
+            console.log('[ThermalPrinter] Barcode added');
           } catch (barcodeError) {
-            console.warn('[ThermalPrinter] Barcode also not supported:', barcodeError);
+            console.warn('[ThermalPrinter] Neither QR nor barcode supported');
           }
         }
         
-        // Always print the order ID text as human-readable reference
-        printer.text(`\nOrder: #${bill.orderId.substring(0, 8)}\n`);
-        
-        if (!qrPrinted && !barcodePrinted) {
-          console.log('[ThermalPrinter] Neither QR nor barcode supported, using text only');
+        // Order ID text
+        if (qrPrinted || barcodePrinted) {
+          printer.text(`#${bill.orderId.substring(0, 8)}\n`);
         }
       }
       
-      // Final feed and cut - this is the only await needed
-      printer.text('\n\n\n').cutPaper();
+      // Minimal paper feed (reduced from \n\n\n to \n)
+      printer.text(options.compactMode ? '\n' : '\n\n');
+      printer.cutPaper();
       
-      console.log('[ThermalPrinter] Sending print job to device...');
+      console.log('[ThermalPrinter] Sending print job...');
       await printer.write();
       
       console.log('[ThermalPrinter] Print job sent successfully');
