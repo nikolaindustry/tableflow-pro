@@ -48,7 +48,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { PrinterSelector } from '@/components/PrinterSelector';
-import { BillData } from '@/services/thermalPrinter';
+import { BillData, loadPrintOptions } from '@/services/thermalPrinter';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -516,6 +516,7 @@ export default function Reports() {
         price: Number(item.unit_price),
       })),
       total: Number(order.total_amount),
+      printOptions: loadPrintOptions(), // Load print settings
     };
   }, [currentRestaurant]);
 

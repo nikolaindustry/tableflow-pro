@@ -28,7 +28,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { PrinterSelector } from '@/components/PrinterSelector';
-import { BillData } from '@/services/thermalPrinter';
+import { BillData, loadPrintOptions } from '@/services/thermalPrinter';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
 type FoodType = Database['public']['Enums']['food_type'];
@@ -392,6 +392,7 @@ export default function KitchenView() {
         price: 0, // Kitchen tickets don't show prices
       })),
       total: 0, // Kitchen tickets don't show total
+      printOptions: loadPrintOptions(), // Load print settings
     };
   }, [currentRestaurant]);
 

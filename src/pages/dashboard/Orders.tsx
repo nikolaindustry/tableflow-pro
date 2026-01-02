@@ -58,6 +58,7 @@ import {
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { PrinterSelector } from '@/components/PrinterSelector';
 import type { BillData } from '@/services/thermalPrinter';
+import { loadPrintOptions } from '@/services/thermalPrinter';
 import type { Database } from '@/integrations/supabase/types';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 
@@ -394,6 +395,7 @@ export default function Orders() {
         price: item.unit_price,
       })),
       total: billingOrder.total_amount,
+      printOptions: loadPrintOptions(), // Load print settings
     };
   }, [billingOrder, currentRestaurant]);
 

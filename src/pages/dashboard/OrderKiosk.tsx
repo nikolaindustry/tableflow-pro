@@ -38,7 +38,8 @@ import {
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { TableOccupiedTimer } from '@/components/TableOccupiedTimer';
 import { PrinterSelector } from '@/components/PrinterSelector';
-import type { BillData, loadPrintOptions } from '@/services/thermalPrinter';
+import type { BillData } from '@/services/thermalPrinter';
+import { loadPrintOptions } from '@/services/thermalPrinter';
 
 interface Table {
   id: string;
