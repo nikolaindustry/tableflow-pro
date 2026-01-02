@@ -586,3 +586,25 @@ class ThermalPrinterService {
 }
 
 export const thermalPrinter = new ThermalPrinterService();
+
+// Helper function to load print options from localStorage
+export const loadPrintOptions = (): PrintOptions => {
+  try {
+    const savedOptions = localStorage.getItem('thermal_print_options');
+    if (savedOptions) {
+      return JSON.parse(savedOptions);
+    }
+  } catch (e) {
+    console.error('Failed to load print options:', e);
+  }
+  
+  // Return defaults if not found or error
+  return {
+    showQRCode: true,
+    showAddress: true,
+    showPhone: true,
+    showGSTIN: true,
+    showThankYou: true,
+    compactMode: false,
+  };
+};

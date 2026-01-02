@@ -38,7 +38,7 @@ import {
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { TableOccupiedTimer } from '@/components/TableOccupiedTimer';
 import { PrinterSelector } from '@/components/PrinterSelector';
-import type { BillData } from '@/services/thermalPrinter';
+import type { BillData, loadPrintOptions } from '@/services/thermalPrinter';
 
 interface Table {
   id: string;
@@ -792,6 +792,7 @@ export default function OrderKiosk() {
         price: item.unit_price,
       })),
       total: activeOrder.total_amount,
+      printOptions: loadPrintOptions(), // Load print settings
     };
   }, [selectedTable, activeOrder, currentRestaurant]);
 
