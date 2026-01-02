@@ -409,7 +409,7 @@ class ThermalPrinterService {
       }
 
       // Compact separator
-      printer.text('--------------------------------\n');
+      printer.text('------------------------------\n');
       
       // Order details (compact single line)
       printer
@@ -424,11 +424,11 @@ class ThermalPrinterService {
       
       // Items header (compact)
       printer
-        .text('--------------------------------\n')
+        .text('------------------------------\n')
         .bold()
         .text('Item        Qty    Amt\n')
         .clearFormatting()
-        .text('--------------------------------\n');
+        .text('------------------------------\n');
 
       // Items list (compact formatting)
       for (const item of bill.items) {
@@ -440,7 +440,7 @@ class ThermalPrinterService {
 
       // Total (compact)
       printer
-        .text('--------------------------------\n')
+        .text('------------------------------\n')
         .bold()
         .align('right')
         .text(`Total: Rs.${bill.total.toFixed(2)}\n`)
