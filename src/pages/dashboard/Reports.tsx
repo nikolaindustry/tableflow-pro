@@ -1167,8 +1167,8 @@ export default function Reports() {
                           className="p-4 rounded-xl border border-border bg-card hover:shadow-md transition-shadow"
                         >
                           <div className="flex items-start justify-between mb-3">
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
                                 <span className="font-semibold text-foreground">
                                   Order #{order.id.slice(0, 8).toUpperCase()}
                                 </span>
@@ -1187,16 +1187,21 @@ export default function Reports() {
                                 {order.table && ` • Table ${order.table.table_number}`}
                               </p>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <p className="text-lg font-bold text-primary">
+                            <div className="flex-shrink-0 ml-2">
+                              <p className="text-lg font-bold text-primary whitespace-nowrap">
                                 ₹{Number(order.total_amount).toLocaleString()}
                               </p>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                title="Print Receipt (Thermal)"
-                                onClick={() => {
+                            </div>
+                          </div>
+                          
+                          {/* Action Buttons Row */}
+                          <div className="flex items-center gap-2 mb-3 flex-wrap">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 flex-shrink-0"
+                              title="Print Receipt (Browser)"
+                              onClick={() => {
                                   const printWindow = window.open('', '_blank', 'width=300,height=600');
                                   if (!printWindow) {
                                     toast({ title: 'Please allow popups to print', variant: 'destructive' });
@@ -1269,43 +1274,46 @@ export default function Reports() {
                                   }, 250);
                                 }}
                               >
-                                <Printer className="w-4 h-4" />
+                                <Printer className="w-4 h-4 mr-1" />
+                                Print
                               </Button>
                               {isBluetoothAvailable && (
                                 <Button
-                                  variant="ghost"
-                                  size="icon"
+                                  variant="outline"
+                                  size="sm"
                                   className={cn(
-                                    "h-8 w-8",
-                                    connectedDevice && "text-green-600 hover:text-green-700"
+                                    "h-8 flex-shrink-0",
+                                    connectedDevice && "text-green-600 hover:text-green-700 border-green-600"
                                   )}
                                   title={connectedDevice ? `Print via ${connectedDevice.name}` : "Connect Thermal Printer"}
                                   onClick={() => handleThermalPrint(order)}
                                   disabled={printing}
                                 >
-                                  <Bluetooth className="w-4 h-4" />
+                                  <Bluetooth className="w-4 h-4 mr-1" />
+                                  {connectedDevice ? 'Thermal' : 'Connect'}
                                 </Button>
                               )}
                               <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 flex-shrink-0"
                                 title="Edit Order"
                                 onClick={() => openEditDialog(order)}
                               >
-                                <Pencil className="w-4 h-4" />
+                                <Pencil className="w-4 h-4 mr-1" />
+                                Edit
                               </Button>
                               <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 flex-shrink-0 text-destructive hover:text-destructive border-destructive/50 hover:bg-destructive/10"
                                 title="Delete Order"
                                 onClick={() => openDeleteDialog(order)}
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-4 h-4 mr-1" />
+                                Delete
                               </Button>
                             </div>
-                          </div>
                           
                           <div className="flex flex-wrap gap-2">
                             {order.order_items.slice(0, 3).map((item) => (
@@ -1430,15 +1438,15 @@ export default function Reports() {
         </Dialog>
 
         {/* Thermal Printer Selector Dialog */}
-        {printerSelectorOpen && (
-          <PrinterSelector
-            onClose={() => {
-              setPrinterSelectorOpen(false);
+        <PrinterSelector
+          open={printerSelectorOpen}
+          onOpenChange={(open) => {
+            setPrinterSelectorOpen(open);
+            if (!open) {
               setSelectedOrderForPrint(null);
-            }}
-            onConnected={handlePrinterConnected}
-          />
-        )}
+            }
+          }}
+        />
       </div>
     </DashboardLayout>
   );
