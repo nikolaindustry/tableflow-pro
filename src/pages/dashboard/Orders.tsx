@@ -501,16 +501,38 @@ export default function Orders() {
                 </>
               )}
               {order.status === 'cooking' && (
-                <Button size="sm" onClick={() => handleUpdateOrderStatus(order.id, 'ready')}>
-                  <CheckCircle className="w-4 h-4 mr-1" />
-                  Mark Ready
-                </Button>
+                <>
+                  <Button size="sm" onClick={() => handleUpdateOrderStatus(order.id, 'ready')}>
+                    <CheckCircle className="w-4 h-4 mr-1" />
+                    Mark Ready
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-destructive"
+                    onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
+                  >
+                    <XCircle className="w-4 h-4 mr-1" />
+                    Cancel
+                  </Button>
+                </>
               )}
               {order.status === 'ready' && (
-                <Button size="sm" onClick={() => openBillingDialog(order)}>
-                  <Receipt className="w-4 h-4 mr-1" />
-                  Generate Bill
-                </Button>
+                <>
+                  <Button size="sm" onClick={() => openBillingDialog(order)}>
+                    <Receipt className="w-4 h-4 mr-1" />
+                    Generate Bill
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-destructive"
+                    onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
+                  >
+                    <XCircle className="w-4 h-4 mr-1" />
+                    Cancel
+                  </Button>
+                </>
               )}
             </div>
           )}
