@@ -15,6 +15,16 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Drawer,
   DrawerContent,
   DrawerDescription,
@@ -148,6 +158,20 @@ export default function Orders() {
   const [billingOrder, setBillingOrder] = useState<Order | null>(null);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [printerSelectorOpen, setPrinterSelectorOpen] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
+
+  const openCancelDialog = (order: Order) => {
+    setOrderToCancel(order);
+    setCancelDialogOpen(true);
+  };
+
+  const confirmCancelOrder = async () => {
+    if (!orderToCancel) return;
+    await handleUpdateOrderStatus(orderToCancel.id, 'cancelled');
+    setCancelDialogOpen(false);
+    setOrderToCancel(null);
+  };
   
   const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing } = useThermalPrinter();
 
@@ -357,10 +381,10 @@ export default function Orders() {
     
     setProcessingPayment(true);
     try {
-      // Mark order as served
+      // Mark order as served and record payment method
       await supabase
         .from('orders')
-        .update({ status: 'served' })
+        .update({ status: 'served', payment_method: paymentMethod })
         .eq('id', billingOrder.id);
 
       // Free up the table
@@ -496,7 +520,7 @@ export default function Orders() {
                     size="sm"
                     variant="outline"
                     className="text-destructive"
-                    onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
+                    onClick={() => openCancelDialog(order)}
                   >
                     <XCircle className="w-4 h-4 mr-1" />
                     Cancel
@@ -504,16 +528,38 @@ export default function Orders() {
                 </>
               )}
               {order.status === 'cooking' && (
-                <Button size="sm" onClick={() => handleUpdateOrderStatus(order.id, 'ready')}>
-                  <CheckCircle className="w-4 h-4 mr-1" />
-                  Mark Ready
-                </Button>
+                <>
+                  <Button size="sm" onClick={() => handleUpdateOrderStatus(order.id, 'ready')}>
+                    <CheckCircle className="w-4 h-4 mr-1" />
+                    Mark Ready
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-destructive"
+                    onClick={() => openCancelDialog(order)}
+                  >
+                    <XCircle className="w-4 h-4 mr-1" />
+                    Cancel
+                  </Button>
+                </>
               )}
               {order.status === 'ready' && (
-                <Button size="sm" onClick={() => openBillingDialog(order)}>
-                  <Receipt className="w-4 h-4 mr-1" />
-                  Generate Bill
-                </Button>
+                <>
+                  <Button size="sm" onClick={() => openBillingDialog(order)}>
+                    <Receipt className="w-4 h-4 mr-1" />
+                    Generate Bill
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-destructive"
+                    onClick={() => openCancelDialog(order)}
+                  >
+                    <XCircle className="w-4 h-4 mr-1" />
+                    Cancel
+                  </Button>
+                </>
               )}
             </div>
           )}
@@ -611,29 +657,28 @@ export default function Orders() {
                 </ScrollArea>
                 
                 {/* Cart Section */}
-                <div className="space-y-2 border-t pt-3">
+                <div className="space-y-2 border-t pt-3 pb-16">
                   <div className="flex items-center justify-between">
-                    <Label>Order Items ({cart.length})</Label>
-                    {cart.length > 0 && (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => setMobileCartOpen(true)}
-                      >
-                        View Cart
-                      </Button>
-                    )}
+                    <div>
+                      <Label>Order Items ({cart.length})</Label>
+                      <p className="text-sm text-muted-foreground">Total: <span className="font-bold text-foreground">₹{cartTotal}</span></p>
+                    </div>
                   </div>
                   {cart.length === 0 ? (
                     <p className="text-center text-muted-foreground py-4 text-sm">No items added yet</p>
                   ) : (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Total</p>
-                        <p className="text-xl font-bold">₹{cartTotal}</p>
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setMobileCartOpen(true)}
+                        className="shrink-0"
+                      >
+                        <ShoppingBag className="w-4 h-4" />
+                      </Button>
                       <Button
                         variant="gradient"
+                        className="flex-1"
                         onClick={handleCreateOrder}
                         disabled={cart.length === 0}
                       >
@@ -1031,6 +1076,29 @@ export default function Orders() {
 
       {/* Printer Selector Dialog */}
       <PrinterSelector open={printerSelectorOpen} onOpenChange={setPrinterSelectorOpen} />
+
+      {/* Cancel Order Confirmation Dialog */}
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Order?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel this order
+              {orderToCancel?.table ? ` for ${orderToCancel.table.table_number}` : ''}?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Order</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmCancelOrder}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Cancel Order
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }

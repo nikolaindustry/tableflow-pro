@@ -11,6 +11,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { 
   BarChart, 
   Bar, 
@@ -41,6 +60,11 @@ import {
   Download,
   FileSpreadsheet,
   Printer,
+  Banknote,
+  CreditCard,
+  Smartphone,
+  Pencil,
+  Trash2,
   Bluetooth
 } from 'lucide-react';
 import { format, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO, eachDayOfInterval, eachHourOfInterval, addHours } from 'date-fns';
@@ -61,6 +85,7 @@ interface Order {
   created_at: string;
   notes: string | null;
   table_id: string | null;
+  payment_method: string | null;
   table?: { table_number: string } | null;
   order_items: {
     id: string;
@@ -107,15 +132,160 @@ export default function Reports() {
   const [customDateFrom, setCustomDateFrom] = useState<Date | undefined>(undefined);
   const [customDateTo, setCustomDateTo] = useState<Date | undefined>(undefined);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [paymentFilter, setPaymentFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [exporting, setExporting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [orderToEdit, setOrderToEdit] = useState<Order | null>(null);
+  const [editPaymentMethod, setEditPaymentMethod] = useState<string>('');
+  const [editStatus, setEditStatus] = useState<string>('');
   const [printerSelectorOpen, setPrinterSelectorOpen] = useState(false);
   const [selectedOrderForPrint, setSelectedOrderForPrint] = useState<Order | null>(null);
   const ordersPerPage = 10;
 
   // Thermal printer hook
   const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing } = useThermalPrinter();
+
+  // Delete order handler
+  const handleDeleteOrder = async () => {
+    if (!orderToDelete) return;
+    
+    try {
+      // First delete order items
+      await supabase
+        .from('order_items')
+        .delete()
+        .eq('order_id', orderToDelete.id);
+      
+      // Then delete the order
+      const { error } = await supabase
+        .from('orders')
+        .delete()
+        .eq('id', orderToDelete.id);
+      
+      if (error) throw error;
+      
+      setOrders(prev => prev.filter(o => o.id !== orderToDelete.id));
+      toast({ title: 'Order deleted successfully' });
+    } catch (error: any) {
+      toast({ title: 'Failed to delete order', description: error.message, variant: 'destructive' });
+    } finally {
+      setDeleteDialogOpen(false);
+      setOrderToDelete(null);
+    }
+  };
+
+  // Edit order handler
+  const handleEditOrder = async () => {
+    if (!orderToEdit) return;
+    
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          payment_method: editPaymentMethod || null,
+          status: editStatus as OrderStatus,
+        })
+        .eq('id', orderToEdit.id);
+      
+      if (error) throw error;
+      
+      setOrders(prev => prev.map(o => 
+        o.id === orderToEdit.id 
+          ? { ...o, payment_method: editPaymentMethod || null, status: editStatus as OrderStatus }
+          : o
+      ));
+      toast({ title: 'Order updated successfully' });
+    } catch (error: any) {
+      toast({ title: 'Failed to update order', description: error.message, variant: 'destructive' });
+    } finally {
+      setEditDialogOpen(false);
+      setOrderToEdit(null);
+    }
+  };
+
+  const openDeleteDialog = (order: Order) => {
+    setOrderToDelete(order);
+    setDeleteDialogOpen(true);
+  };
+
+  const openEditDialog = (order: Order) => {
+    setOrderToEdit(order);
+    setEditPaymentMethod(order.payment_method || '');
+    setEditStatus(order.status);
+    setEditDialogOpen(true);
+  };
+
+  // Thermal printer bill data generator
+  const getBillDataFromOrder = useCallback((order: Order): BillData | null => {
+    if (!currentRestaurant) return null;
+    
+    return {
+      restaurantName: currentRestaurant.name,
+      restaurantAddress: currentRestaurant.address,
+      restaurantPhone: currentRestaurant.phone || null,
+      restaurantGstin: currentRestaurant.gstin || null,
+      tableNumber: order.table?.table_number || 'Take Away',
+      orderId: order.id,
+      items: order.order_items.map(item => ({
+        name: item.menu_item?.name || 'Unknown',
+        quantity: item.quantity,
+        price: Number(item.unit_price)
+      })),
+      total: Number(order.total_amount),
+      printOptions: loadPrintOptions(), // Load print settings
+    };
+  }, [currentRestaurant]);
+
+  // Handle thermal print
+  const handleThermalPrint = useCallback(async (order: Order) => {
+    const billData = getBillDataFromOrder(order);
+    if (!billData) return;
+
+    try {
+      if (!connectedDevice) {
+        // No printer connected - open selector
+        setSelectedOrderForPrint(order);
+        setPrinterSelectorOpen(true);
+        return;
+      }
+
+      // Print via connected Bluetooth printer
+      await printThermal(billData, true);
+      toast({ title: 'Printed successfully' });
+    } catch (error: any) {
+      console.error('[Reports] Print error:', error);
+      toast({
+        title: 'Print failed',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
+  }, [connectedDevice, getBillDataFromOrder, printThermal, toast]);
+
+  // Handle auto-print after printer connection
+  const handlePrinterConnected = useCallback(async () => {
+    if (selectedOrderForPrint) {
+      const billData = getBillDataFromOrder(selectedOrderForPrint);
+      if (billData && connectedDevice) {
+        try {
+          await printThermal(billData, true);
+          toast({ title: 'Printed successfully' });
+        } catch (error: any) {
+          toast({
+            title: 'Print failed',
+            description: error.message,
+            variant: 'destructive'
+          });
+        }
+      }
+      setSelectedOrderForPrint(null);
+    }
+    setPrinterSelectorOpen(false);
+  }, [selectedOrderForPrint, connectedDevice, getBillDataFromOrder, printThermal, toast]);
 
   // Calculate date range
   const getDateRange = useMemo(() => {
@@ -154,6 +324,7 @@ export default function Reports() {
           created_at,
           notes,
           table_id,
+          payment_method,
           order_items (
             id,
             quantity,
@@ -210,6 +381,17 @@ export default function Reports() {
     const totalRevenue = completed.reduce((sum, o) => sum + Number(o.total_amount), 0);
     const avgOrderValue = completed.length > 0 ? totalRevenue / completed.length : 0;
     
+    // Payment method breakdown
+    const cashRevenue = completed
+      .filter(o => o.payment_method === 'cash')
+      .reduce((sum, o) => sum + Number(o.total_amount), 0);
+    const onlineRevenue = completed
+      .filter(o => o.payment_method === 'card' || o.payment_method === 'upi')
+      .reduce((sum, o) => sum + Number(o.total_amount), 0);
+    const unpaidRevenue = completed
+      .filter(o => !o.payment_method)
+      .reduce((sum, o) => sum + Number(o.total_amount), 0);
+    
     return {
       totalOrders: orders.length,
       completedOrders: completed.length,
@@ -217,6 +399,9 @@ export default function Reports() {
       pendingOrders: pending.length,
       totalRevenue,
       avgOrderValue,
+      cashRevenue,
+      onlineRevenue,
+      unpaidRevenue,
     };
   }, [orders]);
 
@@ -314,20 +499,18 @@ export default function Reports() {
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
       const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-      const searchLower = searchTerm.toLowerCase();
+      const matchesPayment = paymentFilter === 'all' || 
+        (paymentFilter === 'unpaid' && !order.payment_method) ||
+        (paymentFilter === 'online' && (order.payment_method === 'card' || order.payment_method === 'upi')) ||
+        order.payment_method === paymentFilter;
       const matchesSearch = !searchTerm || 
-        // Search by order ID (both full UUID and displayed 8-char version)
-        order.id.toLowerCase().includes(searchLower) ||
-        order.id.slice(0, 8).toLowerCase().includes(searchLower) ||
-        // Search by menu item names
         order.order_items.some(item => 
-          item.menu_item?.name.toLowerCase().includes(searchLower)
+          item.menu_item?.name.toLowerCase().includes(searchTerm.toLowerCase())
         ) ||
-        // Search by table number
-        order.table?.table_number.toLowerCase().includes(searchLower);
-      return matchesStatus && matchesSearch;
+        order.table?.table_number.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesStatus && matchesPayment && matchesSearch;
     });
-  }, [orders, statusFilter, searchTerm]);
+  }, [orders, statusFilter, paymentFilter, searchTerm]);
 
   // Pagination
   const paginatedOrders = useMemo(() => {
@@ -498,119 +681,6 @@ export default function Reports() {
       setExporting(false);
     }
   }, [currentRestaurant, orders, filteredOrders, stats, popularItems, getDateRange, toast]);
-
-  // Generate bill data from an order for thermal printing
-  const getBillDataFromOrder = useCallback((order: Order): BillData | null => {
-    if (!currentRestaurant) return null;
-    
-    return {
-      restaurantName: currentRestaurant.name,
-      restaurantAddress: currentRestaurant.address,
-      restaurantPhone: currentRestaurant.phone,
-      restaurantGstin: currentRestaurant.gstin,
-      tableNumber: order.table?.table_number,
-      orderId: order.id,
-      items: order.order_items.map(item => ({
-        name: item.menu_item?.name || 'Unknown Item',
-        quantity: item.quantity,
-        price: Number(item.unit_price),
-      })),
-      total: Number(order.total_amount),
-      printOptions: loadPrintOptions(), // Load print settings
-    };
-  }, [currentRestaurant]);
-
-  // Handle thermal printing for an order
-  const handlePrintOrder = useCallback(async (order: Order, useBluetooth: boolean = false) => {
-    const billData = getBillDataFromOrder(order);
-    if (!billData) {
-      toast({ title: 'Unable to generate bill data', variant: 'destructive' });
-      return;
-    }
-    
-    try {
-      await printThermal(billData, useBluetooth);
-      if (useBluetooth) {
-        toast({ title: 'Receipt printed via Bluetooth' });
-      }
-    } catch (error: any) {
-      toast({ title: error.message || 'Print failed', variant: 'destructive' });
-    }
-  }, [getBillDataFromOrder, printThermal, toast]);
-
-  // Browser print for an order (existing functionality refactored)
-  const handleBrowserPrint = useCallback((order: Order) => {
-    const printWindow = window.open('', '_blank', 'width=300,height=600');
-    if (!printWindow) {
-      toast({ title: 'Please allow popups to print', variant: 'destructive' });
-      return;
-    }
-    
-    const itemsHtml = order.order_items.map(item => `
-      <tr>
-        <td style="text-align:left;padding:2px 0;">${item.menu_item?.name || 'Unknown'}</td>
-        <td style="text-align:center;padding:2px 4px;">${item.quantity}</td>
-        <td style="text-align:right;padding:2px 0;">Rs.${(item.quantity * Number(item.unit_price)).toLocaleString()}</td>
-      </tr>
-    `).join('');
-    
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Receipt</title>
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: 'Courier New', monospace; font-size: 12px; width: 80mm; padding: 5mm; }
-          .header { text-align: center; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 10px; }
-          .header h1 { font-size: 16px; margin-bottom: 5px; }
-          .info { margin-bottom: 10px; }
-          .info p { margin: 2px 0; }
-          table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-          .divider { border-top: 1px dashed #000; margin: 10px 0; }
-          .total { font-weight: bold; font-size: 14px; text-align: right; }
-          .footer { text-align: center; margin-top: 15px; font-size: 10px; }
-          @media print { body { width: 80mm; } }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>${currentRestaurant?.name || 'Restaurant'}</h1>
-          ${currentRestaurant?.address ? `<p>${currentRestaurant.address}</p>` : ''}
-          ${currentRestaurant?.phone ? `<p>Tel: ${currentRestaurant.phone}</p>` : ''}
-        </div>
-        <div class="info">
-          <p><strong>Order #${order.id.slice(0, 8).toUpperCase()}</strong></p>
-          <p>Date: ${format(parseISO(order.created_at), 'dd/MM/yyyy HH:mm')}</p>
-          ${order.table ? `<p>Table: ${order.table.table_number}</p>` : ''}
-        </div>
-        <div class="divider"></div>
-        <table>
-          <thead>
-            <tr>
-              <th style="text-align:left;">Item</th>
-              <th style="text-align:center;">Qty</th>
-              <th style="text-align:right;">Amt</th>
-            </tr>
-          </thead>
-          <tbody>${itemsHtml}</tbody>
-        </table>
-        <div class="divider"></div>
-        <p class="total">TOTAL: Rs.${Number(order.total_amount).toLocaleString()}</p>
-        <div class="footer">
-          <p>Thank you for dining with us!</p>
-          ${currentRestaurant?.gstin ? `<p>GSTIN: ${currentRestaurant.gstin}</p>` : ''}
-        </div>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
-  }, [currentRestaurant, toast]);
 
   if (!currentRestaurant) {
     return (
@@ -786,6 +856,48 @@ export default function Reports() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Payment Method Breakdown */}
+            <Card className="glass-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <IndianRupee className="w-5 h-5 text-primary" />
+                  Revenue by Payment Type
+                </CardTitle>
+                <CardDescription>Breakdown of payments by method</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="flex items-center gap-3 p-4 rounded-xl bg-success/10 border border-success/20">
+                    <div className="w-10 h-10 rounded-lg bg-success/20 flex items-center justify-center">
+                      <Banknote className="w-5 h-5 text-success" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Cash</p>
+                      <p className="text-xl font-bold text-foreground">₹{stats.cashRevenue.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-4 rounded-xl bg-primary/10 border border-primary/20">
+                    <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                      <Smartphone className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Online (Card/UPI)</p>
+                      <p className="text-xl font-bold text-foreground">₹{stats.onlineRevenue.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-4 rounded-xl bg-muted border border-border">
+                    <div className="w-10 h-10 rounded-lg bg-muted-foreground/20 flex items-center justify-center">
+                      <CreditCard className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Not Recorded</p>
+                      <p className="text-xl font-bold text-foreground">₹{stats.unpaidRevenue.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Popular Items */}
             <Card className="glass-card">
@@ -979,7 +1091,7 @@ export default function Reports() {
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="relative flex-1">
                 <Input
-                  placeholder="Search by order ID, item, or table..."
+                  placeholder="Search orders by item or table..."
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
@@ -1003,6 +1115,22 @@ export default function Reports() {
                   <SelectItem value="ready">Ready</SelectItem>
                   <SelectItem value="served">Served</SelectItem>
                   <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={paymentFilter} onValueChange={(value) => {
+                setPaymentFilter(value);
+                setCurrentPage(1);
+              }}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="All Payments" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Payments</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="online">Online (Card/UPI)</SelectItem>
+                  <SelectItem value="card">Card Only</SelectItem>
+                  <SelectItem value="upi">UPI Only</SelectItem>
+                  <SelectItem value="unpaid">Not Recorded</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1047,6 +1175,12 @@ export default function Reports() {
                                 <Badge className={cn('status-badge', STATUS_CONFIG[order.status].className)}>
                                   {STATUS_CONFIG[order.status].label}
                                 </Badge>
+                                {order.payment_method && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {order.payment_method === 'cash' ? <Banknote className="w-3 h-3 mr-1" /> : <Smartphone className="w-3 h-3 mr-1" />}
+                                    {order.payment_method.toUpperCase()}
+                                  </Badge>
+                                )}
                               </div>
                               <p className="text-sm text-muted-foreground">
                                 {format(parseISO(order.created_at), 'PPp')}
@@ -1057,53 +1191,119 @@ export default function Reports() {
                               <p className="text-lg font-bold text-primary">
                                 ₹{Number(order.total_amount).toLocaleString()}
                               </p>
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    title="Print Receipt"
-                                    disabled={printing}
-                                  >
-                                    <Printer className="w-4 h-4" />
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-48 p-2" align="end">
-                                  <div className="space-y-1">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="w-full justify-start"
-                                      onClick={() => handleBrowserPrint(order)}
-                                    >
-                                      <Printer className="w-4 h-4 mr-2" />
-                                      Browser Print
-                                    </Button>
-                                    {isBluetoothAvailable && (
-                                      <Button
-                                        variant={connectedDevice ? "default" : "ghost"}
-                                        size="sm"
-                                        className={`w-full justify-start ${connectedDevice ? 'bg-success hover:bg-success/90 text-white' : ''}`}
-                                        onClick={() => {
-                                          if (connectedDevice) {
-                                            handlePrintOrder(order, true);
-                                          } else {
-                                            setSelectedOrderForPrint(order);
-                                            setPrinterSelectorOpen(true);
-                                          }
-                                        }}
-                                        disabled={printing}
-                                      >
-                                        <Bluetooth className="w-4 h-4 mr-2" />
-                                        <span className="truncate">
-                                          {connectedDevice ? `Print via ${connectedDevice.name}` : 'Connect Printer'}
-                                        </span>
-                                      </Button>
-                                    )}
-                                  </div>
-                                </PopoverContent>
-                              </Popover>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                title="Print Receipt (Thermal)"
+                                onClick={() => {
+                                  const printWindow = window.open('', '_blank', 'width=300,height=600');
+                                  if (!printWindow) {
+                                    toast({ title: 'Please allow popups to print', variant: 'destructive' });
+                                    return;
+                                  }
+                                  
+                                  const itemsHtml = order.order_items.map(item => `
+                                    <tr>
+                                      <td style="text-align:left;padding:2px 0;">${item.menu_item?.name || 'Unknown'}</td>
+                                      <td style="text-align:center;padding:2px 4px;">${item.quantity}</td>
+                                      <td style="text-align:right;padding:2px 0;">₹${(item.quantity * Number(item.unit_price)).toLocaleString()}</td>
+                                    </tr>
+                                  `).join('');
+                                  
+                                  printWindow.document.write(`
+                                    <!DOCTYPE html>
+                                    <html>
+                                    <head>
+                                      <title>Receipt</title>
+                                      <style>
+                                        * { margin: 0; padding: 0; box-sizing: border-box; }
+                                        body { font-family: 'Courier New', monospace; font-size: 12px; width: 80mm; padding: 5mm; }
+                                        .header { text-align: center; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 10px; }
+                                        .header h1 { font-size: 16px; margin-bottom: 5px; }
+                                        .info { margin-bottom: 10px; }
+                                        .info p { margin: 2px 0; }
+                                        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+                                        .divider { border-top: 1px dashed #000; margin: 10px 0; }
+                                        .total { font-weight: bold; font-size: 14px; text-align: right; }
+                                        .footer { text-align: center; margin-top: 15px; font-size: 10px; }
+                                        @media print { body { width: 80mm; } }
+                                      </style>
+                                    </head>
+                                    <body>
+                                      <div class="header">
+                                        <h1>${currentRestaurant?.name || 'Restaurant'}</h1>
+                                        ${currentRestaurant?.address ? `<p>${currentRestaurant.address}</p>` : ''}
+                                        ${currentRestaurant?.phone ? `<p>Tel: ${currentRestaurant.phone}</p>` : ''}
+                                      </div>
+                                      <div class="info">
+                                        <p><strong>Order #${order.id.slice(0, 8).toUpperCase()}</strong></p>
+                                        <p>Date: ${format(parseISO(order.created_at), 'dd/MM/yyyy HH:mm')}</p>
+                                        ${order.table ? `<p>Table: ${order.table.table_number}</p>` : ''}
+                                      </div>
+                                      <div class="divider"></div>
+                                      <table>
+                                        <thead>
+                                          <tr>
+                                            <th style="text-align:left;">Item</th>
+                                            <th style="text-align:center;">Qty</th>
+                                            <th style="text-align:right;">Amt</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>${itemsHtml}</tbody>
+                                      </table>
+                                      <div class="divider"></div>
+                                      <p class="total">TOTAL: ₹${Number(order.total_amount).toLocaleString()}</p>
+                                      <div class="footer">
+                                        <p>Thank you for dining with us!</p>
+                                        ${currentRestaurant?.gstin ? `<p>GSTIN: ${currentRestaurant.gstin}</p>` : ''}
+                                      </div>
+                                    </body>
+                                    </html>
+                                  `);
+                                  printWindow.document.close();
+                                  printWindow.focus();
+                                  setTimeout(() => {
+                                    printWindow.print();
+                                    printWindow.close();
+                                  }, 250);
+                                }}
+                              >
+                                <Printer className="w-4 h-4" />
+                              </Button>
+                              {isBluetoothAvailable && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className={cn(
+                                    "h-8 w-8",
+                                    connectedDevice && "text-green-600 hover:text-green-700"
+                                  )}
+                                  title={connectedDevice ? `Print via ${connectedDevice.name}` : "Connect Thermal Printer"}
+                                  onClick={() => handleThermalPrint(order)}
+                                  disabled={printing}
+                                >
+                                  <Bluetooth className="w-4 h-4" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                title="Edit Order"
+                                onClick={() => openEditDialog(order)}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                title="Delete Order"
+                                onClick={() => openDeleteDialog(order)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
                             </div>
                           </div>
                           
@@ -1157,20 +1357,88 @@ export default function Reports() {
           </TabsContent>
         </Tabs>
 
-        {/* Printer Selector Dialog */}
-        <PrinterSelector 
-          open={printerSelectorOpen} 
-          onOpenChange={(open) => {
-            setPrinterSelectorOpen(open);
-            if (!open) {
-              // After closing the printer selector, if a device is connected and we have a pending order, print it
-              if (connectedDevice && selectedOrderForPrint) {
-                handlePrintOrder(selectedOrderForPrint, true);
-                setSelectedOrderForPrint(null);
-              }
-            }
-          }} 
-        />
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Order?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete Order #{orderToDelete?.id.slice(0, 8).toUpperCase()}?
+                This will permanently remove the order and all its items. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteOrder}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete Order
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Edit Order Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Order</DialogTitle>
+              <DialogDescription>
+                Update Order #{orderToEdit?.id.slice(0, 8).toUpperCase()}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Payment Method</Label>
+                <Select value={editPaymentMethod} onValueChange={setEditPaymentMethod}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select payment method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="upi">UPI</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Order Status</Label>
+                <Select value={editStatus} onValueChange={setEditStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="cooking">Cooking</SelectItem>
+                    <SelectItem value="ready">Ready</SelectItem>
+                    <SelectItem value="served">Served</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditOrder}>
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Thermal Printer Selector Dialog */}
+        {printerSelectorOpen && (
+          <PrinterSelector
+            onClose={() => {
+              setPrinterSelectorOpen(false);
+              setSelectedOrderForPrint(null);
+            }}
+            onConnected={handlePrinterConnected}
+          />
+        )}
       </div>
     </DashboardLayout>
   );
