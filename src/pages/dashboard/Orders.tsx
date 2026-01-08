@@ -380,10 +380,10 @@ export default function Orders() {
     
     setProcessingPayment(true);
     try {
-      // Mark order as served
+      // Mark order as served and record payment method
       await supabase
         .from('orders')
-        .update({ status: 'served' })
+        .update({ status: 'served', payment_method: paymentMethod })
         .eq('id', billingOrder.id);
 
       // Free up the table

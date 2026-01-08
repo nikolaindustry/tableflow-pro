@@ -11,6 +11,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { 
   BarChart, 
   Bar, 
@@ -40,7 +59,12 @@ import {
   FileText,
   Download,
   FileSpreadsheet,
-  Printer
+  Printer,
+  Banknote,
+  CreditCard,
+  Smartphone,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import { format, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO, eachDayOfInterval, eachHourOfInterval, addHours } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -57,6 +81,7 @@ interface Order {
   created_at: string;
   notes: string | null;
   table_id: string | null;
+  payment_method: string | null;
   table?: { table_number: string } | null;
   order_items: {
     id: string;
@@ -106,7 +131,83 @@ export default function Reports() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [exporting, setExporting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [orderToEdit, setOrderToEdit] = useState<Order | null>(null);
+  const [editPaymentMethod, setEditPaymentMethod] = useState<string>('');
+  const [editStatus, setEditStatus] = useState<string>('');
   const ordersPerPage = 10;
+
+  // Delete order handler
+  const handleDeleteOrder = async () => {
+    if (!orderToDelete) return;
+    
+    try {
+      // First delete order items
+      await supabase
+        .from('order_items')
+        .delete()
+        .eq('order_id', orderToDelete.id);
+      
+      // Then delete the order
+      const { error } = await supabase
+        .from('orders')
+        .delete()
+        .eq('id', orderToDelete.id);
+      
+      if (error) throw error;
+      
+      setOrders(prev => prev.filter(o => o.id !== orderToDelete.id));
+      toast({ title: 'Order deleted successfully' });
+    } catch (error: any) {
+      toast({ title: 'Failed to delete order', description: error.message, variant: 'destructive' });
+    } finally {
+      setDeleteDialogOpen(false);
+      setOrderToDelete(null);
+    }
+  };
+
+  // Edit order handler
+  const handleEditOrder = async () => {
+    if (!orderToEdit) return;
+    
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          payment_method: editPaymentMethod || null,
+          status: editStatus as OrderStatus,
+        })
+        .eq('id', orderToEdit.id);
+      
+      if (error) throw error;
+      
+      setOrders(prev => prev.map(o => 
+        o.id === orderToEdit.id 
+          ? { ...o, payment_method: editPaymentMethod || null, status: editStatus as OrderStatus }
+          : o
+      ));
+      toast({ title: 'Order updated successfully' });
+    } catch (error: any) {
+      toast({ title: 'Failed to update order', description: error.message, variant: 'destructive' });
+    } finally {
+      setEditDialogOpen(false);
+      setOrderToEdit(null);
+    }
+  };
+
+  const openDeleteDialog = (order: Order) => {
+    setOrderToDelete(order);
+    setDeleteDialogOpen(true);
+  };
+
+  const openEditDialog = (order: Order) => {
+    setOrderToEdit(order);
+    setEditPaymentMethod(order.payment_method || '');
+    setEditStatus(order.status);
+    setEditDialogOpen(true);
+  };
 
   // Calculate date range
   const getDateRange = useMemo(() => {
@@ -145,6 +246,7 @@ export default function Reports() {
           created_at,
           notes,
           table_id,
+          payment_method,
           order_items (
             id,
             quantity,
@@ -201,6 +303,17 @@ export default function Reports() {
     const totalRevenue = completed.reduce((sum, o) => sum + Number(o.total_amount), 0);
     const avgOrderValue = completed.length > 0 ? totalRevenue / completed.length : 0;
     
+    // Payment method breakdown
+    const cashRevenue = completed
+      .filter(o => o.payment_method === 'cash')
+      .reduce((sum, o) => sum + Number(o.total_amount), 0);
+    const onlineRevenue = completed
+      .filter(o => o.payment_method === 'card' || o.payment_method === 'upi')
+      .reduce((sum, o) => sum + Number(o.total_amount), 0);
+    const unpaidRevenue = completed
+      .filter(o => !o.payment_method)
+      .reduce((sum, o) => sum + Number(o.total_amount), 0);
+    
     return {
       totalOrders: orders.length,
       completedOrders: completed.length,
@@ -208,6 +321,9 @@ export default function Reports() {
       pendingOrders: pending.length,
       totalRevenue,
       avgOrderValue,
+      cashRevenue,
+      onlineRevenue,
+      unpaidRevenue,
     };
   }, [orders]);
 
@@ -659,6 +775,48 @@ export default function Reports() {
               </Card>
             </div>
 
+            {/* Payment Method Breakdown */}
+            <Card className="glass-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <IndianRupee className="w-5 h-5 text-primary" />
+                  Revenue by Payment Type
+                </CardTitle>
+                <CardDescription>Breakdown of payments by method</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="flex items-center gap-3 p-4 rounded-xl bg-success/10 border border-success/20">
+                    <div className="w-10 h-10 rounded-lg bg-success/20 flex items-center justify-center">
+                      <Banknote className="w-5 h-5 text-success" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Cash</p>
+                      <p className="text-xl font-bold text-foreground">₹{stats.cashRevenue.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-4 rounded-xl bg-primary/10 border border-primary/20">
+                    <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                      <Smartphone className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Online (Card/UPI)</p>
+                      <p className="text-xl font-bold text-foreground">₹{stats.onlineRevenue.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-4 rounded-xl bg-muted border border-border">
+                    <div className="w-10 h-10 rounded-lg bg-muted-foreground/20 flex items-center justify-center">
+                      <CreditCard className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Not Recorded</p>
+                      <p className="text-xl font-bold text-foreground">₹{stats.unpaidRevenue.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Popular Items */}
             <Card className="glass-card">
               <CardHeader>
@@ -919,6 +1077,12 @@ export default function Reports() {
                                 <Badge className={cn('status-badge', STATUS_CONFIG[order.status].className)}>
                                   {STATUS_CONFIG[order.status].label}
                                 </Badge>
+                                {order.payment_method && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {order.payment_method === 'cash' ? <Banknote className="w-3 h-3 mr-1" /> : <Smartphone className="w-3 h-3 mr-1" />}
+                                    {order.payment_method.toUpperCase()}
+                                  </Badge>
+                                )}
                               </div>
                               <p className="text-sm text-muted-foreground">
                                 {format(parseISO(order.created_at), 'PPp')}
@@ -1009,6 +1173,24 @@ export default function Reports() {
                               >
                                 <Printer className="w-4 h-4" />
                               </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                title="Edit Order"
+                                onClick={() => openEditDialog(order)}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                title="Delete Order"
+                                onClick={() => openDeleteDialog(order)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
                             </div>
                           </div>
                           
@@ -1061,6 +1243,78 @@ export default function Reports() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Order?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete Order #{orderToDelete?.id.slice(0, 8).toUpperCase()}?
+                This will permanently remove the order and all its items. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteOrder}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete Order
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Edit Order Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Order</DialogTitle>
+              <DialogDescription>
+                Update Order #{orderToEdit?.id.slice(0, 8).toUpperCase()}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Payment Method</Label>
+                <Select value={editPaymentMethod} onValueChange={setEditPaymentMethod}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select payment method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="upi">UPI</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Order Status</Label>
+                <Select value={editStatus} onValueChange={setEditStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="cooking">Cooking</SelectItem>
+                    <SelectItem value="ready">Ready</SelectItem>
+                    <SelectItem value="served">Served</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditOrder}>
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );
