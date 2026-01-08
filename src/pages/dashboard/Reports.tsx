@@ -128,6 +128,7 @@ export default function Reports() {
   const [customDateFrom, setCustomDateFrom] = useState<Date | undefined>(undefined);
   const [customDateTo, setCustomDateTo] = useState<Date | undefined>(undefined);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [paymentFilter, setPaymentFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [exporting, setExporting] = useState(false);
@@ -421,14 +422,18 @@ export default function Reports() {
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
       const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+      const matchesPayment = paymentFilter === 'all' || 
+        (paymentFilter === 'unpaid' && !order.payment_method) ||
+        (paymentFilter === 'online' && (order.payment_method === 'card' || order.payment_method === 'upi')) ||
+        order.payment_method === paymentFilter;
       const matchesSearch = !searchTerm || 
         order.order_items.some(item => 
           item.menu_item?.name.toLowerCase().includes(searchTerm.toLowerCase())
         ) ||
         order.table?.table_number.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesStatus && matchesSearch;
+      return matchesStatus && matchesPayment && matchesSearch;
     });
-  }, [orders, statusFilter, searchTerm]);
+  }, [orders, statusFilter, paymentFilter, searchTerm]);
 
   // Pagination
   const paginatedOrders = useMemo(() => {
@@ -1033,6 +1038,22 @@ export default function Reports() {
                   <SelectItem value="ready">Ready</SelectItem>
                   <SelectItem value="served">Served</SelectItem>
                   <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={paymentFilter} onValueChange={(value) => {
+                setPaymentFilter(value);
+                setCurrentPage(1);
+              }}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="All Payments" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Payments</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="online">Online (Card/UPI)</SelectItem>
+                  <SelectItem value="card">Card Only</SelectItem>
+                  <SelectItem value="upi">UPI Only</SelectItem>
+                  <SelectItem value="unpaid">Not Recorded</SelectItem>
                 </SelectContent>
               </Select>
             </div>
