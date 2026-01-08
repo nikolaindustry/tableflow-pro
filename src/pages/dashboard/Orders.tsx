@@ -654,29 +654,28 @@ export default function Orders() {
                 </ScrollArea>
                 
                 {/* Cart Section */}
-                <div className="space-y-2 border-t pt-3">
+                <div className="space-y-2 border-t pt-3 pb-16">
                   <div className="flex items-center justify-between">
-                    <Label>Order Items ({cart.length})</Label>
-                    {cart.length > 0 && (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => setMobileCartOpen(true)}
-                      >
-                        View Cart
-                      </Button>
-                    )}
+                    <div>
+                      <Label>Order Items ({cart.length})</Label>
+                      <p className="text-sm text-muted-foreground">Total: <span className="font-bold text-foreground">₹{cartTotal}</span></p>
+                    </div>
                   </div>
                   {cart.length === 0 ? (
                     <p className="text-center text-muted-foreground py-4 text-sm">No items added yet</p>
                   ) : (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Total</p>
-                        <p className="text-xl font-bold">₹{cartTotal}</p>
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setMobileCartOpen(true)}
+                        className="shrink-0"
+                      >
+                        <ShoppingBag className="w-4 h-4" />
+                      </Button>
                       <Button
                         variant="gradient"
+                        className="flex-1"
                         onClick={handleCreateOrder}
                         disabled={cart.length === 0}
                       >
