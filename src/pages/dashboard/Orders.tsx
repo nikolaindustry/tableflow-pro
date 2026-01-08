@@ -15,6 +15,16 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Drawer,
   DrawerContent,
   DrawerDescription,
@@ -147,6 +157,20 @@ export default function Orders() {
   const [billingOrder, setBillingOrder] = useState<Order | null>(null);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [printerSelectorOpen, setPrinterSelectorOpen] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
+
+  const openCancelDialog = (order: Order) => {
+    setOrderToCancel(order);
+    setCancelDialogOpen(true);
+  };
+
+  const confirmCancelOrder = async () => {
+    if (!orderToCancel) return;
+    await handleUpdateOrderStatus(orderToCancel.id, 'cancelled');
+    setCancelDialogOpen(false);
+    setOrderToCancel(null);
+  };
   
   const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing } = useThermalPrinter();
 
@@ -493,7 +517,7 @@ export default function Orders() {
                     size="sm"
                     variant="outline"
                     className="text-destructive"
-                    onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
+                    onClick={() => openCancelDialog(order)}
                   >
                     <XCircle className="w-4 h-4 mr-1" />
                     Cancel
@@ -510,7 +534,7 @@ export default function Orders() {
                     size="sm"
                     variant="outline"
                     className="text-destructive"
-                    onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
+                    onClick={() => openCancelDialog(order)}
                   >
                     <XCircle className="w-4 h-4 mr-1" />
                     Cancel
@@ -527,7 +551,7 @@ export default function Orders() {
                     size="sm"
                     variant="outline"
                     className="text-destructive"
-                    onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
+                    onClick={() => openCancelDialog(order)}
                   >
                     <XCircle className="w-4 h-4 mr-1" />
                     Cancel
@@ -1050,6 +1074,29 @@ export default function Orders() {
 
       {/* Printer Selector Dialog */}
       <PrinterSelector open={printerSelectorOpen} onOpenChange={setPrinterSelectorOpen} />
+
+      {/* Cancel Order Confirmation Dialog */}
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Order?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel this order
+              {orderToCancel?.table ? ` for ${orderToCancel.table.table_number}` : ''}?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Order</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmCancelOrder}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Cancel Order
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }
