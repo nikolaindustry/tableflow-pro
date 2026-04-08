@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
-import { supabase } from '@/integrations/supabase/client';
+import { localApi } from '@/services/localApi';
+import { sseClient } from '@/services/sseClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,12 +22,11 @@ import {
   VolumeX,
   Printer,
 } from 'lucide-react';
-import type { Database } from '@/integrations/supabase/types';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-type OrderStatus = Database['public']['Enums']['order_status'];
-type FoodType = Database['public']['Enums']['food_type'];
+type OrderStatus = 'pending' | 'cooking' | 'ready' | 'served' | 'cancelled';
+type FoodType = 'veg' | 'non_veg' | 'egg';
 
 interface OrderItem {
   id: string;
@@ -106,18 +106,7 @@ export default function KitchenView() {
     if (!currentRestaurant) return;
 
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          table:tables(table_number, floor:floors(name)),
-          order_items(*, menu_item:menu_items(name, food_type, preparation_time))
-        `)
-        .eq('restaurant_id', currentRestaurant.id)
-        .in('status', ['pending', 'cooking', 'ready'])
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
+      const data = await localApi.getOrders(currentRestaurant.id, 'active');
       setOrders(data || []);
     } catch (error) {
       console.error('Error fetching orders:', error);
@@ -134,78 +123,41 @@ export default function KitchenView() {
   useEffect(() => {
     if (!currentRestaurant) return;
 
-    const channel = supabase
-      .channel('kitchen-orders')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'orders',
-          filter: `restaurant_id=eq.${currentRestaurant.id}`,
-        },
-        (payload) => {
-          console.log('Order change:', payload);
-          fetchOrders();
-          
-          if (payload.eventType === 'INSERT') {
-            playNotificationSound();
-            toast.info('New order received!', {
-              icon: <Bell className="w-4 h-4" />,
-            });
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'order_items',
-        },
-        (payload) => {
-          console.log('Order item change:', payload);
-          fetchOrders();
-        }
-      )
-      .subscribe();
+    const unsub1 = sseClient.on('order_change', (payload: any) => {
+      fetchOrders();
+      if (payload?.type === 'INSERT') {
+        playNotificationSound();
+        toast.info('New order received!', {
+          icon: <Bell className="w-4 h-4" />,
+        });
+      }
+    });
+    const unsub2 = sseClient.on('order_items_change', () => {
+      fetchOrders();
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      unsub1();
+      unsub2();
     };
   }, [currentRestaurant]);
 
   const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: newStatus })
-        .eq('id', orderId);
+      await localApi.updateOrder(orderId, { status: newStatus });
 
-      if (error) throw error;
-
-      // Also update order items based on their current status
+      // Also bulk-update order items based on their current status
       if (newStatus === 'cooking') {
-        // Only update pending items to cooking (preserve ready items)
-        await supabase
-          .from('order_items')
-          .update({ status: newStatus })
-          .eq('order_id', orderId)
-          .eq('status', 'pending');
+        await localApi.bulkUpdateOrderItems(orderId, 'pending', 'cooking');
       } else if (newStatus === 'ready') {
-        // Only update non-ready items to ready (e.g., cooking -> ready)
-        await supabase
-          .from('order_items')
-          .update({ status: newStatus })
-          .eq('order_id', orderId)
-          .neq('status', 'ready');
+        await localApi.bulkUpdateOrderItems(orderId, 'cooking', 'ready');
       }
 
       // If served, free up the table
       if (newStatus === 'served') {
         const order = orders.find((o) => o.id === orderId);
         if (order?.table_id) {
-          await supabase.from('tables').update({ is_occupied: false }).eq('id', order.table_id);
+          await localApi.updateTable(order.table_id, { is_occupied: false });
         }
       }
 
@@ -217,12 +169,7 @@ export default function KitchenView() {
 
   const handleUpdateItemStatus = async (itemId: string, newStatus: OrderStatus, orderId: string) => {
     try {
-      const { error } = await supabase
-        .from('order_items')
-        .update({ status: newStatus })
-        .eq('id', itemId);
-
-      if (error) throw error;
+      await localApi.updateOrderItem(itemId, { status: newStatus });
       
       // If marking as ready, check if all items in the order are now ready
       if (newStatus === 'ready') {
@@ -235,10 +182,7 @@ export default function KitchenView() {
           
           if (allItemsReady) {
             // Auto-update order status to ready
-            await supabase
-              .from('orders')
-              .update({ status: 'ready' })
-              .eq('id', orderId);
+            await localApi.updateOrder(orderId, { status: 'ready' });
             toast.success('All items ready - Order marked as Ready!');
             return;
           }

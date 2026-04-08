@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,21 +15,9 @@ export default function ResetPassword() {
   const [isValidSession, setIsValidSession] = useState(false);
 
   useEffect(() => {
-    // Check if user has a valid recovery session
-    supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setIsValidSession(true);
-      } else if (session) {
-        setIsValidSession(true);
-      }
-    });
-
-    // Also check current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setIsValidSession(true);
-      }
-    });
+    // In local mode, password reset via email link is not supported
+    // Just allow the form if they navigated here
+    setIsValidSession(true);
   }, []);
 
   const handleResetPassword = async (e: React.FormEvent) => {
@@ -48,14 +35,9 @@ export default function ResetPassword() {
 
     setLoading(true);
 
-    const { error } = await supabase.auth.updateUser({ password });
-
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success('Password updated successfully!');
-      navigate('/dashboard');
-    }
+    // In local mode, just redirect back - password changes not supported
+    toast.info('Password reset is not available in offline mode. Contact your admin.');
+    navigate('/auth');
 
     setLoading(false);
   };
