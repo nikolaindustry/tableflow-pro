@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { localApi } from '@/services/localApi';
+import { sseClient } from '@/services/sseClient';
 
 export function useActiveOrderCount(restaurantId: string | undefined) {
   const [count, setCount] = useState(0);
@@ -11,38 +12,23 @@ export function useActiveOrderCount(restaurantId: string | undefined) {
     }
 
     const fetchCount = async () => {
-      const { count: orderCount, error } = await supabase
-        .from('orders')
-        .select('*', { count: 'exact', head: true })
-        .eq('restaurant_id', restaurantId)
-        .in('status', ['pending', 'cooking']);
-
-      if (!error && orderCount !== null) {
-        setCount(orderCount);
+      try {
+        const orders = await localApi.getOrders(restaurantId, 'active');
+        setCount(orders?.length || 0);
+      } catch {
+        // ignore
       }
     };
 
     fetchCount();
 
-    // Real-time subscription
-    const channel = supabase
-      .channel('order-count-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'orders',
-          filter: `restaurant_id=eq.${restaurantId}`,
-        },
-        () => {
-          fetchCount();
-        }
-      )
-      .subscribe();
+    // Real-time subscription via SSE
+    const unsub = sseClient.on('order_change', () => {
+      fetchCount();
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      unsub();
     };
   }, [restaurantId]);
 

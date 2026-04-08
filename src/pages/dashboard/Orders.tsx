@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
-import { supabase } from '@/integrations/supabase/client';
+import { localApi } from '@/services/localApi';
+import { sseClient } from '@/services/sseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -68,12 +69,11 @@ import {
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { PrinterSelector } from '@/components/PrinterSelector';
 import type { BillData } from '@/services/thermalPrinter';
-import type { Database } from '@/integrations/supabase/types';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 
-type OrderStatus = Database['public']['Enums']['order_status'];
-type FoodType = Database['public']['Enums']['food_type'];
-type SpiceLevel = Database['public']['Enums']['spice_level'];
+type OrderStatus = 'pending' | 'cooking' | 'ready' | 'served' | 'cancelled';
+type FoodType = 'veg' | 'non_veg' | 'egg';
+type SpiceLevel = 'mild' | 'medium' | 'spicy' | 'extra_spicy';
 
 interface Table {
   id: string;
@@ -178,34 +178,15 @@ export default function Orders() {
     if (!currentRestaurant) return;
 
     try {
-      const [ordersRes, tablesRes, menuRes] = await Promise.all([
-        supabase
-          .from('orders')
-          .select(`
-            *,
-            table:tables(table_number, floor:floors(name)),
-            order_items(*, menu_item:menu_items(name, food_type))
-          `)
-          .eq('restaurant_id', currentRestaurant.id)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('tables')
-          .select('id, table_number, floor:floors!inner(name, restaurant_id)')
-          .eq('floor.restaurant_id', currentRestaurant.id),
-        supabase
-          .from('menu_items')
-          .select('id, name, price, food_type, spice_level, is_available, category:menu_categories!inner(name, restaurant_id)')
-          .eq('category.restaurant_id', currentRestaurant.id)
-          .eq('is_available', true),
+      const [ordersData, tablesData, menuData] = await Promise.all([
+        localApi.getOrders(currentRestaurant.id),
+        localApi.getTables(currentRestaurant.id),
+        localApi.getMenuItems(currentRestaurant.id, true),
       ]);
 
-      if (ordersRes.error) throw ordersRes.error;
-      if (tablesRes.error) throw tablesRes.error;
-      if (menuRes.error) throw menuRes.error;
-
-      setOrders(ordersRes.data || []);
-      setTables((tablesRes.data as any) || []);
-      setMenuItems((menuRes.data as any) || []);
+      setOrders(ordersData || []);
+      setTables((tablesData as any) || []);
+      setMenuItems((menuData as any) || []);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -221,43 +202,19 @@ export default function Orders() {
   useEffect(() => {
     if (!currentRestaurant) return;
 
-    const channel = supabase
-      .channel('orders-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'orders',
-          filter: `restaurant_id=eq.${currentRestaurant.id}`,
-        },
-        (payload) => {
-          console.log('Order change:', payload);
-          fetchData();
-          
-          if (payload.eventType === 'INSERT') {
-            toast.info('New order created!', {
-              icon: <Bell className="w-4 h-4" />,
-            });
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'order_items',
-        },
-        () => {
-          console.log('Order items changed');
-          fetchData();
-        }
-      )
-      .subscribe();
+    const unsub1 = sseClient.on('order_change', () => {
+      fetchData();
+      toast.info('New order update!', {
+        icon: <Bell className="w-4 h-4" />,
+      });
+    });
+    const unsub2 = sseClient.on('order_items_change', () => {
+      fetchData();
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      unsub1();
+      unsub2();
     };
   }, [currentRestaurant, fetchData]);
 
@@ -303,38 +260,20 @@ export default function Orders() {
     }
 
     try {
-      // Create order
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert({
-          restaurant_id: currentRestaurant.id,
-          table_id: selectedTableId && selectedTableId !== 'takeaway' ? selectedTableId : null,
-          total_amount: cartTotal,
-          notes: orderNotes || null,
-          status: 'pending',
-        })
-        .select()
-        .single();
-
-      if (orderError) throw orderError;
-
-      // Create order items
-      const orderItems = cart.map((item) => ({
-        order_id: order.id,
-        menu_item_id: item.menuItemId,
-        quantity: item.quantity,
-        unit_price: item.price,
-        status: 'pending' as OrderStatus,
-      }));
-
-      const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-
-      if (itemsError) throw itemsError;
-
-      // Update table to occupied if selected
-      if (selectedTableId) {
-        await supabase.from('tables').update({ is_occupied: true }).eq('id', selectedTableId);
-      }
+      // Create order via local API (handles items + table update atomically)
+      await localApi.createOrder({
+        restaurant_id: currentRestaurant.id,
+        table_id: selectedTableId && selectedTableId !== 'takeaway' ? selectedTableId : null,
+        total_amount: cartTotal,
+        notes: orderNotes || null,
+        status: 'pending',
+        items: cart.map((item) => ({
+          menu_item_id: item.menuItemId,
+          quantity: item.quantity,
+          unit_price: item.price,
+          status: 'pending' as OrderStatus,
+        })),
+      });
 
       toast.success('Order created successfully');
       setDialogOpen(false);
@@ -347,20 +286,7 @@ export default function Orders() {
 
   const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: newStatus })
-        .eq('id', orderId);
-
-      if (error) throw error;
-
-      // If served or cancelled, free up the table
-      if (newStatus === 'served' || newStatus === 'cancelled') {
-        const order = orders.find((o) => o.id === orderId);
-        if (order?.table_id) {
-          await supabase.from('tables').update({ is_occupied: false }).eq('id', order.table_id);
-        }
-      }
+      await localApi.updateOrder(orderId, { status: newStatus });
 
       toast.success(`Order marked as ${newStatus}`);
       fetchData();
@@ -381,15 +307,7 @@ export default function Orders() {
     setProcessingPayment(true);
     try {
       // Mark order as served and record payment method
-      await supabase
-        .from('orders')
-        .update({ status: 'served', payment_method: paymentMethod })
-        .eq('id', billingOrder.id);
-
-      // Free up the table
-      if (billingOrder.table_id) {
-        await supabase.from('tables').update({ is_occupied: false }).eq('id', billingOrder.table_id);
-      }
+      await localApi.updateOrder(billingOrder.id, { status: 'served', payment_method: paymentMethod });
 
       setBillingDialogOpen(false);
       setBillingOrder(null);

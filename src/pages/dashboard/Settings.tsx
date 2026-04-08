@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
-import { supabase } from '@/integrations/supabase/client';
+import { localApi } from '@/services/localApi';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -36,30 +36,26 @@ export default function Settings() {
     if (!currentRestaurant) return;
 
     setSaving(true);
-    const { error } = await supabase
-      .from('restaurants')
-      .update({
+    try {
+      await localApi.updateRestaurant(currentRestaurant.id, {
         name: form.name,
         phone: form.phone,
         address: form.address,
         gstin: form.gstin,
-      })
-      .eq('id', currentRestaurant.id);
-
-    setSaving(false);
-
-    if (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to save settings',
-        variant: 'destructive',
       });
-    } else {
+      setSaving(false);
       toast({
         title: 'Saved',
         description: 'Restaurant settings updated successfully',
       });
       refreshRestaurants();
+    } catch (error: any) {
+      setSaving(false);
+      toast({
+        title: 'Error',
+        description: 'Failed to save settings',
+        variant: 'destructive',
+      });
     }
   };
 

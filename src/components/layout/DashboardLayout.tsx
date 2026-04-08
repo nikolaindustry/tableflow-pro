@@ -33,9 +33,9 @@ import {
   Wallet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Database } from '@/integrations/supabase/types';
+import { SyncButton } from '@/components/SyncButton';
 
-type StaffRole = Database['public']['Enums']['staff_role'];
+type StaffRole = 'owner' | 'manager' | 'chef' | 'waiter' | 'cashier';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -286,6 +286,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
+            <SyncButton />
             <UtensilsCrossed className="w-5 h-5 text-primary" />
             <span className="font-semibold">RestroFlow</span>
           </div>

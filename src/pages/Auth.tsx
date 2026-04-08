@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -39,25 +38,7 @@ export default function Auth() {
   };
 
   const handleForgotPassword = async () => {
-    if (!loginEmail) {
-      toast.error('Please enter your email address first');
-      return;
-    }
-
-    setLoading(true);
-    const redirectUrl = `${window.location.origin}/reset-password`;
-    
-    const { error } = await supabase.auth.resetPasswordForEmail(loginEmail, {
-      redirectTo: redirectUrl,
-    });
-
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success('Password reset email sent! Check your inbox.');
-    }
-    
-    setLoading(false);
+    toast.info('Password reset is not available in offline mode. Contact your admin.');
   };
 
   const handleSignup = async (e: React.FormEvent) => {

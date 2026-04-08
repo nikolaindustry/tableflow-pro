@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
-import { supabase } from '@/integrations/supabase/client';
+import { localApi } from '@/services/localApi';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -68,8 +68,17 @@ interface TableConfig {
   insertRow: (restaurantId: string, data: Record<string, any>) => Promise<{ error: any }>;
 }
 
-// Helper to cast inserts to any to avoid strict Supabase typing
-const insertAs = (table: any) => table.insert as (data: any) => Promise<{ error: any }>;
+// Helper for generic CRUD via localApi
+const genericApi = {
+  async query(endpoint: string): Promise<{ data: any[] | null; error: any }> {
+    try {
+      const data = await (localApi as any)[endpoint];
+      return { data, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  },
+};
 
 const tableConfigs: TableConfig[] = [
   {
@@ -81,10 +90,18 @@ const tableConfigs: TableConfig[] = [
       { key: 'floor_number', label: 'Floor Number', editable: true, insertable: true, type: 'number', required: true },
       { key: 'created_at', label: 'Created At' },
     ],
-    getQuery: async (restaurantId) => supabase.from('floors').select('*').eq('restaurant_id', restaurantId).order('floor_number'),
-    deleteRow: async (id) => supabase.from('floors').delete().eq('id', id),
-    updateRow: async (id, data) => supabase.from('floors').update(data).eq('id', id),
-    insertRow: async (restaurantId, data) => supabase.from('floors').insert({ ...data, restaurant_id: restaurantId } as any),
+    getQuery: async (restaurantId) => {
+      try { return { data: await localApi.getFloors(restaurantId), error: null }; } catch (e) { return { data: [], error: e }; }
+    },
+    deleteRow: async (id) => {
+      try { await localApi.deleteFloor(id); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    updateRow: async (id, data) => {
+      try { await localApi.updateFloor(id, data); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    insertRow: async (restaurantId, data) => {
+      try { await localApi.createFloor({ ...data, restaurant_id: restaurantId }); return { error: null }; } catch (e) { return { error: e }; }
+    },
   },
   {
     name: 'tables',
@@ -98,13 +115,17 @@ const tableConfigs: TableConfig[] = [
       { key: 'created_at', label: 'Created At' },
     ],
     getQuery: async (restaurantId) => {
-      const { data: floors } = await supabase.from('floors').select('id').eq('restaurant_id', restaurantId);
-      if (!floors?.length) return { data: [], error: null };
-      return supabase.from('tables').select('*').in('floor_id', floors.map(f => f.id)).order('table_number');
+      try { return { data: await localApi.getTables(restaurantId), error: null }; } catch (e) { return { data: [], error: e }; }
     },
-    deleteRow: async (id) => supabase.from('tables').delete().eq('id', id),
-    updateRow: async (id, data) => supabase.from('tables').update(data).eq('id', id),
-    insertRow: async (_restaurantId, data) => supabase.from('tables').insert(data as any),
+    deleteRow: async (id) => {
+      try { await localApi.deleteTable(id); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    updateRow: async (id, data) => {
+      try { await localApi.updateTable(id, data); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    insertRow: async (_restaurantId, data) => {
+      try { await localApi.createTable(data); return { error: null }; } catch (e) { return { error: e }; }
+    },
   },
   {
     name: 'kitchens',
@@ -116,10 +137,18 @@ const tableConfigs: TableConfig[] = [
       { key: 'is_active', label: 'Active' },
       { key: 'created_at', label: 'Created At' },
     ],
-    getQuery: async (restaurantId) => supabase.from('kitchens').select('*').eq('restaurant_id', restaurantId).order('name'),
-    deleteRow: async (id) => supabase.from('kitchens').delete().eq('id', id),
-    updateRow: async (id, data) => supabase.from('kitchens').update(data).eq('id', id),
-    insertRow: async (restaurantId, data) => supabase.from('kitchens').insert({ ...data, restaurant_id: restaurantId } as any),
+    getQuery: async (restaurantId) => {
+      try { return { data: await localApi.getKitchens(restaurantId), error: null }; } catch (e) { return { data: [], error: e }; }
+    },
+    deleteRow: async (id) => {
+      try { await localApi.deleteKitchen(id); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    updateRow: async (id, data) => {
+      try { await localApi.updateKitchen(id, data); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    insertRow: async (restaurantId, data) => {
+      try { await localApi.createKitchen({ ...data, restaurant_id: restaurantId }); return { error: null }; } catch (e) { return { error: e }; }
+    },
   },
   {
     name: 'menu_categories',
@@ -132,10 +161,18 @@ const tableConfigs: TableConfig[] = [
       { key: 'is_active', label: 'Active' },
       { key: 'created_at', label: 'Created At' },
     ],
-    getQuery: async (restaurantId) => supabase.from('menu_categories').select('*').eq('restaurant_id', restaurantId).order('sort_order'),
-    deleteRow: async (id) => supabase.from('menu_categories').delete().eq('id', id),
-    updateRow: async (id, data) => supabase.from('menu_categories').update(data).eq('id', id),
-    insertRow: async (restaurantId, data) => supabase.from('menu_categories').insert({ ...data, restaurant_id: restaurantId } as any),
+    getQuery: async (restaurantId) => {
+      try { return { data: await localApi.getMenuCategories(restaurantId), error: null }; } catch (e) { return { data: [], error: e }; }
+    },
+    deleteRow: async (id) => {
+      try { await localApi.deleteMenuCategory(id); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    updateRow: async (id, data) => {
+      try { await localApi.updateMenuCategory(id, data); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    insertRow: async (restaurantId, data) => {
+      try { await localApi.createMenuCategory({ ...data, restaurant_id: restaurantId }); return { error: null }; } catch (e) { return { error: e }; }
+    },
   },
   {
     name: 'menu_items',
@@ -151,13 +188,17 @@ const tableConfigs: TableConfig[] = [
       { key: 'category_id', label: 'Category ID', insertable: true, required: true },
     ],
     getQuery: async (restaurantId) => {
-      const { data: categories } = await supabase.from('menu_categories').select('id').eq('restaurant_id', restaurantId);
-      if (!categories?.length) return { data: [], error: null };
-      return supabase.from('menu_items').select('*').in('category_id', categories.map(c => c.id)).order('name');
+      try { return { data: await localApi.getMenuItems(restaurantId), error: null }; } catch (e) { return { data: [], error: e }; }
     },
-    deleteRow: async (id) => supabase.from('menu_items').delete().eq('id', id),
-    updateRow: async (id, data) => supabase.from('menu_items').update(data).eq('id', id),
-    insertRow: async (_restaurantId, data) => supabase.from('menu_items').insert(data as any),
+    deleteRow: async (id) => {
+      try { await localApi.deleteMenuItem(id); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    updateRow: async (id, data) => {
+      try { await localApi.updateMenuItem(id, data); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    insertRow: async (_restaurantId, data) => {
+      try { await localApi.createMenuItem(data); return { error: null }; } catch (e) { return { error: e }; }
+    },
   },
   {
     name: 'orders',
@@ -171,10 +212,18 @@ const tableConfigs: TableConfig[] = [
       { key: 'created_at', label: 'Created At' },
       { key: 'updated_at', label: 'Updated At' },
     ],
-    getQuery: async (restaurantId) => supabase.from('orders').select('*').eq('restaurant_id', restaurantId).order('created_at', { ascending: false }),
-    deleteRow: async (id) => supabase.from('orders').delete().eq('id', id),
-    updateRow: async (id, data) => supabase.from('orders').update(data).eq('id', id),
-    insertRow: async (restaurantId, data) => supabase.from('orders').insert({ ...data, restaurant_id: restaurantId } as any),
+    getQuery: async (restaurantId) => {
+      try { return { data: await localApi.getOrders(restaurantId), error: null }; } catch (e) { return { data: [], error: e }; }
+    },
+    deleteRow: async (id) => {
+      try { await localApi.deleteOrder(id); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    updateRow: async (id, data) => {
+      try { await localApi.updateOrder(id, data); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    insertRow: async (restaurantId, data) => {
+      try { await localApi.createOrder({ ...data, restaurant_id: restaurantId }); return { error: null }; } catch (e) { return { error: e }; }
+    },
   },
   {
     name: 'order_items',
@@ -190,13 +239,22 @@ const tableConfigs: TableConfig[] = [
       { key: 'created_at', label: 'Created At' },
     ],
     getQuery: async (restaurantId) => {
-      const { data: orders } = await supabase.from('orders').select('id').eq('restaurant_id', restaurantId);
-      if (!orders?.length) return { data: [], error: null };
-      return supabase.from('order_items').select('*').in('order_id', orders.map(o => o.id)).order('created_at', { ascending: false });
+      try {
+        // Get all orders first, then get their items
+        const orders = await localApi.getOrders(restaurantId);
+        const allItems = orders?.flatMap((o: any) => o.order_items || []) || [];
+        return { data: allItems, error: null };
+      } catch (e) { return { data: [], error: e }; }
     },
-    deleteRow: async (id) => supabase.from('order_items').delete().eq('id', id),
-    updateRow: async (id, data) => supabase.from('order_items').update(data).eq('id', id),
-    insertRow: async (_restaurantId, data) => supabase.from('order_items').insert(data as any),
+    deleteRow: async (id) => {
+      try { await localApi.updateOrderItem(id, { status: 'cancelled' }); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    updateRow: async (id, data) => {
+      try { await localApi.updateOrderItem(id, data); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    insertRow: async (_restaurantId, _data) => {
+      return { error: new Error('Use order creation to add items') };
+    },
   },
   {
     name: 'staff_members',
@@ -210,10 +268,18 @@ const tableConfigs: TableConfig[] = [
       { key: 'is_active', label: 'Active' },
       { key: 'joined_at', label: 'Joined At' },
     ],
-    getQuery: async (restaurantId) => supabase.from('staff_members').select('*').eq('restaurant_id', restaurantId).order('role'),
-    deleteRow: async (id) => supabase.from('staff_members').delete().eq('id', id),
-    updateRow: async (id, data) => supabase.from('staff_members').update(data).eq('id', id),
-    insertRow: async (restaurantId, data) => supabase.from('staff_members').insert({ ...data, restaurant_id: restaurantId } as any),
+    getQuery: async (restaurantId) => {
+      try { return { data: await localApi.getStaff(restaurantId), error: null }; } catch (e) { return { data: [], error: e }; }
+    },
+    deleteRow: async (id) => {
+      try { await localApi.deleteStaff(id); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    updateRow: async (id, data) => {
+      try { await localApi.updateStaff(id, data); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    insertRow: async (restaurantId, data) => {
+      try { await localApi.createStaff({ ...data, restaurant_id: restaurantId }); return { error: null }; } catch (e) { return { error: e }; }
+    },
   },
   {
     name: 'shifts',
@@ -226,10 +292,18 @@ const tableConfigs: TableConfig[] = [
       { key: 'end_time', label: 'End Time', editable: true, insertable: true, required: true },
       { key: 'notes', label: 'Notes', editable: true, insertable: true },
     ],
-    getQuery: async (restaurantId) => supabase.from('shifts').select('*').eq('restaurant_id', restaurantId).order('shift_date', { ascending: false }),
-    deleteRow: async (id) => supabase.from('shifts').delete().eq('id', id),
-    updateRow: async (id, data) => supabase.from('shifts').update(data).eq('id', id),
-    insertRow: async (restaurantId, data) => supabase.from('shifts').insert({ ...data, restaurant_id: restaurantId } as any),
+    getQuery: async (restaurantId) => {
+      try { return { data: await localApi.getShifts(restaurantId), error: null }; } catch (e) { return { data: [], error: e }; }
+    },
+    deleteRow: async (id) => {
+      try { await localApi.deleteShift(id); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    updateRow: async (id, data) => {
+      try { await localApi.updateShift(id, data); return { error: null }; } catch (e) { return { error: e }; }
+    },
+    insertRow: async (restaurantId, data) => {
+      try { await localApi.createShift({ ...data, restaurant_id: restaurantId }); return { error: null }; } catch (e) { return { error: e }; }
+    },
   },
 ];
 

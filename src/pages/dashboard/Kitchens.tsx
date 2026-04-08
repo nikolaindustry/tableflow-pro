@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
-import { supabase } from '@/integrations/supabase/client';
+import { localApi } from '@/services/localApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,13 +42,7 @@ export default function Kitchens() {
     if (!currentRestaurant) return;
 
     try {
-      const { data, error } = await supabase
-        .from('kitchens')
-        .select('*')
-        .eq('restaurant_id', currentRestaurant.id)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
+      const data = await localApi.getKitchens(currentRestaurant.id);
       setKitchens(data || []);
     } catch (error) {
       console.error('Error fetching kitchens:', error);
@@ -86,22 +80,15 @@ export default function Kitchens() {
 
     try {
       if (editingKitchen) {
-        const { error } = await supabase
-          .from('kitchens')
-          .update({ name, description: description || null, is_active: isActive })
-          .eq('id', editingKitchen.id);
-
-        if (error) throw error;
+        await localApi.updateKitchen(editingKitchen.id, { name, description: description || null, is_active: isActive });
         toast.success('Kitchen updated successfully');
       } else {
-        const { error } = await supabase.from('kitchens').insert({
+        await localApi.createKitchen({
           restaurant_id: currentRestaurant.id,
           name,
           description: description || null,
           is_active: isActive,
         });
-
-        if (error) throw error;
         toast.success('Kitchen created successfully');
       }
 
@@ -117,8 +104,7 @@ export default function Kitchens() {
     if (!confirm('Are you sure you want to delete this kitchen?')) return;
 
     try {
-      const { error } = await supabase.from('kitchens').delete().eq('id', id);
-      if (error) throw error;
+      await localApi.deleteKitchen(id);
       toast.success('Kitchen deleted');
       fetchKitchens();
     } catch (error: any) {
@@ -128,12 +114,7 @@ export default function Kitchens() {
 
   const toggleActive = async (kitchen: Kitchen) => {
     try {
-      const { error } = await supabase
-        .from('kitchens')
-        .update({ is_active: !kitchen.is_active })
-        .eq('id', kitchen.id);
-
-      if (error) throw error;
+      await localApi.updateKitchen(kitchen.id, { is_active: !kitchen.is_active });
       toast.success(`Kitchen ${!kitchen.is_active ? 'activated' : 'deactivated'}`);
       fetchKitchens();
     } catch (error: any) {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { localApi } from '@/services/localApi';
 import { useToast } from '@/hooks/use-toast';
 
 export type StaffRole = 'owner' | 'manager' | 'waiter' | 'chef';
@@ -45,14 +45,7 @@ export function useStaffMembers(restaurantId: string | undefined) {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('staff_members')
-        .select('*')
-        .eq('restaurant_id', restaurantId)
-        .order('role', { ascending: true })
-        .order('full_name', { ascending: true });
-
-      if (error) throw error;
+      const data = await localApi.getStaff(restaurantId);
       setStaffMembers((data || []) as StaffMember[]);
     } catch (error: any) {
       console.error('Error fetching staff members:', error);
@@ -79,15 +72,13 @@ export function useStaffMembers(restaurantId: string | undefined) {
     if (!restaurantId) return { error: new Error('No restaurant selected') };
 
     try {
-      const { error } = await supabase.from('staff_members').insert({
+      await localApi.createStaff({
         restaurant_id: restaurantId,
         email: data.email,
         full_name: data.full_name,
         phone: data.phone || null,
         role: data.role,
       });
-
-      if (error) throw error;
       await fetchStaffMembers();
       return { error: null };
     } catch (error: any) {
@@ -97,12 +88,7 @@ export function useStaffMembers(restaurantId: string | undefined) {
 
   const updateStaffMember = async (id: string, data: Partial<StaffMember>) => {
     try {
-      const { error } = await supabase
-        .from('staff_members')
-        .update(data)
-        .eq('id', id);
-
-      if (error) throw error;
+      await localApi.updateStaff(id, data);
       await fetchStaffMembers();
       return { error: null };
     } catch (error: any) {
@@ -112,12 +98,7 @@ export function useStaffMembers(restaurantId: string | undefined) {
 
   const deleteStaffMember = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('staff_members')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      await localApi.deleteStaff(id);
       await fetchStaffMembers();
       return { error: null };
     } catch (error: any) {
@@ -148,24 +129,16 @@ export function useShifts(restaurantId: string | undefined) {
     }
 
     try {
-      let query = supabase
-        .from('shifts')
-        .select('*, staff_member:staff_members(*)')
-        .eq('restaurant_id', restaurantId)
-        .order('shift_date', { ascending: true })
-        .order('start_time', { ascending: true });
-
+      const data = await localApi.getShifts(restaurantId);
+      // Client-side filtering for date range
+      let filtered = data || [];
       if (startDate) {
-        query = query.gte('shift_date', startDate);
+        filtered = filtered.filter((s: any) => s.shift_date >= startDate);
       }
       if (endDate) {
-        query = query.lte('shift_date', endDate);
+        filtered = filtered.filter((s: any) => s.shift_date <= endDate);
       }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      setShifts((data || []) as Shift[]);
+      setShifts(filtered as Shift[]);
     } catch (error: any) {
       console.error('Error fetching shifts:', error);
       toast({
@@ -192,7 +165,7 @@ export function useShifts(restaurantId: string | undefined) {
     if (!restaurantId) return { error: new Error('No restaurant selected') };
 
     try {
-      const { error } = await supabase.from('shifts').insert({
+      await localApi.createShift({
         restaurant_id: restaurantId,
         staff_member_id: data.staff_member_id,
         shift_date: data.shift_date,
@@ -200,8 +173,6 @@ export function useShifts(restaurantId: string | undefined) {
         end_time: data.end_time,
         notes: data.notes || null,
       });
-
-      if (error) throw error;
       await fetchShifts();
       return { error: null };
     } catch (error: any) {
@@ -211,12 +182,7 @@ export function useShifts(restaurantId: string | undefined) {
 
   const updateShift = async (id: string, data: Partial<Shift>) => {
     try {
-      const { error } = await supabase
-        .from('shifts')
-        .update(data)
-        .eq('id', id);
-
-      if (error) throw error;
+      await localApi.updateShift(id, data);
       await fetchShifts();
       return { error: null };
     } catch (error: any) {
@@ -226,9 +192,7 @@ export function useShifts(restaurantId: string | undefined) {
 
   const deleteShift = async (id: string) => {
     try {
-      const { error } = await supabase.from('shifts').delete().eq('id', id);
-
-      if (error) throw error;
+      await localApi.deleteShift(id);
       await fetchShifts();
       return { error: null };
     } catch (error: any) {

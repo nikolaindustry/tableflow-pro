@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Bluetooth, BluetoothSearching, Check, Loader2, Unplug } from 'lucide-react';
+import { Bluetooth, BluetoothSearching, Check, Loader2, Unplug, Printer } from 'lucide-react';
 import { PrinterDevice } from '@/services/thermalPrinter';
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { toast } from 'sonner';
@@ -63,12 +63,11 @@ export function PrinterSelector({ open, onOpenChange }: PrinterSelectorProps) {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Bluetooth className="w-5 h-5" />
-              Bluetooth Printing
+              <Printer className="w-5 h-5" />
+              USB Printer
             </DialogTitle>
             <DialogDescription>
-              Bluetooth printing is only available on mobile devices (iOS/Android).
-              Use browser print for desktop.
+              No USB printers detected. Make sure the printer is connected and powered on.
             </DialogDescription>
           </DialogHeader>
         </DialogContent>
@@ -81,11 +80,11 @@ export function PrinterSelector({ open, onOpenChange }: PrinterSelectorProps) {
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Bluetooth className="w-5 h-5" />
-            Connect Thermal Printer
+            <Printer className="w-5 h-5" />
+            Connect USB Printer
           </DialogTitle>
           <DialogDescription>
-            Scan for nearby Bluetooth thermal printers
+            Select a USB thermal printer from the list
           </DialogDescription>
         </DialogHeader>
 
@@ -111,7 +110,7 @@ export function PrinterSelector({ open, onOpenChange }: PrinterSelectorProps) {
           >
             {scanning ? (
               <>
-                <BluetoothSearching className="w-4 h-4 mr-2 animate-pulse" />
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Scanning...
               </>
             ) : (
@@ -158,7 +157,7 @@ export function PrinterSelector({ open, onOpenChange }: PrinterSelectorProps) {
 
           {devices.length === 0 && !scanning && (
             <p className="text-sm text-muted-foreground text-center py-4">
-              Click "Scan for Printers" to find nearby Bluetooth printers
+              Click "Scan for Printers" to find connected USB printers
             </p>
           )}
         </div>
