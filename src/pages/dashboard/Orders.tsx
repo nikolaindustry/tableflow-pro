@@ -423,15 +423,29 @@ export default function Orders() {
     };
   }, [billingOrder, currentRestaurant]);
 
-  const handlePrintBill = async (useBluetooth: boolean = false) => {
+  const handlePrintBill = async (method: 'usb' | 'bluetooth' | 'browser' = 'usb') => {
     const billData = getBillData();
     if (!billData) return;
     
     try {
-      await printThermal(billData, useBluetooth);
-      if (useBluetooth) {
-        toast.success('Bill printed via Bluetooth');
+      if (method === 'usb' && usbPrinter) {
+        await printUSB(billData);
+        toast.success('Receipt printed');
+      } else if (method === 'bluetooth' && connectedDevice) {
+        await printThermal(billData, true);
+        toast.success('Receipt printed via Bluetooth');
+      } else {
+        await printThermal(billData, false);
       }
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  };
+
+  const handleConnectUSB = async () => {
+    try {
+      await connectUSB();
+      toast.success('USB printer connected!');
     } catch (error: any) {
       toast.error(error.message);
     }
