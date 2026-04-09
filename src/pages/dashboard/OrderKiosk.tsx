@@ -38,8 +38,10 @@ import {
   List,
 } from 'lucide-react';
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
+import { useUSBPrinter } from '@/hooks/useUSBPrinter';
 import { TableOccupiedTimer } from '@/components/TableOccupiedTimer';
 import { PrinterSelector } from '@/components/PrinterSelector';
+import { Usb } from 'lucide-react';
 import type { BillData } from '@/services/thermalPrinter';
 
 interface Table {
@@ -153,7 +155,8 @@ export default function OrderKiosk() {
   const [tableSearchQuery, setTableSearchQuery] = useState('');
   const isMobile = useIsMobile();
   
-  const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing } = useThermalPrinter(); // Thermal printer hook
+  const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing } = useThermalPrinter();
+  const { connectedPrinter: usbPrinter, printing: usbPrinting, isAvailable: isUSBAvailable, connectPrinter: connectUSB, disconnectPrinter: disconnectUSB, printBill: printUSB } = useUSBPrinter();
 
   const fetchData = async () => {
     if (!currentRestaurant) return;
@@ -798,15 +801,29 @@ export default function OrderKiosk() {
     };
   }, [selectedTable, activeOrder, currentRestaurant]);
 
-  const handlePrintBill = async (useBluetooth: boolean = false) => {
+  const handlePrintBill = async (method: 'usb' | 'bluetooth' | 'browser' = 'usb') => {
     const billData = getBillData();
     if (!billData) return;
     
     try {
-      await printThermal(billData, useBluetooth);
-      if (useBluetooth) {
-        toast.success('Bill printed via Bluetooth');
+      if (method === 'usb' && usbPrinter) {
+        await printUSB(billData);
+        toast.success('Receipt printed');
+      } else if (method === 'bluetooth' && connectedDevice) {
+        await printThermal(billData, true);
+        toast.success('Receipt printed via Bluetooth');
+      } else {
+        await printThermal(billData, false);
       }
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  };
+
+  const handleConnectUSB = async () => {
+    try {
+      await connectUSB();
+      toast.success('USB printer connected!');
     } catch (error: any) {
       toast.error(error.message);
     }
@@ -1754,19 +1771,33 @@ export default function OrderKiosk() {
 
             {/* Print Options */}
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => handlePrintBill(false)} disabled={printing}>
+              {/* USB Thermal Print - Primary */}
+              {isUSBAvailable && (
+                <Button 
+                  variant={usbPrinter ? 'default' : 'outline'}
+                  className={`flex-1 ${usbPrinter ? 'bg-primary' : ''}`}
+                  onClick={() => usbPrinter ? handlePrintBill('usb') : handleConnectUSB()}
+                  disabled={usbPrinting}
+                >
+                  <Usb className="w-4 h-4 mr-2" />
+                  {usbPrinter ? `Print (${usbPrinter.name.substring(0, 12)})` : 'Connect USB Printer'}
+                </Button>
+              )}
+              {/* Browser Print - Fallback */}
+              <Button variant="outline" className={isUSBAvailable ? '' : 'flex-1'} onClick={() => handlePrintBill('browser')} disabled={printing}>
                 <Printer className="w-4 h-4 mr-2" />
-                Browser Print
+                Browser
               </Button>
+              {/* Bluetooth - Mobile only */}
               {isBluetoothAvailable && (
                 <Button 
                   variant="outline" 
-                  className={`flex-1 ${connectedDevice ? 'border-success text-success' : ''}`}
-                  onClick={() => connectedDevice ? handlePrintBill(true) : setPrinterSelectorOpen(true)}
+                  className={connectedDevice ? 'border-success text-success' : ''}
+                  onClick={() => connectedDevice ? handlePrintBill('bluetooth') : setPrinterSelectorOpen(true)}
                   disabled={printing}
                 >
                   <Bluetooth className="w-4 h-4 mr-2" />
-                  {connectedDevice ? 'Thermal Print' : 'Connect Printer'}
+                  {connectedDevice ? 'BT' : 'BT'}
                 </Button>
               )}
             </div>
