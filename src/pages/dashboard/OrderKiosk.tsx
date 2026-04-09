@@ -38,8 +38,10 @@ import {
   List,
 } from 'lucide-react';
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
+import { useUSBPrinter } from '@/hooks/useUSBPrinter';
 import { TableOccupiedTimer } from '@/components/TableOccupiedTimer';
 import { PrinterSelector } from '@/components/PrinterSelector';
+import { Usb } from 'lucide-react';
 import type { BillData } from '@/services/thermalPrinter';
 
 interface Table {

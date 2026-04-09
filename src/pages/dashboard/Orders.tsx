@@ -66,7 +66,9 @@ import {
   Settings,
 } from 'lucide-react';
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
+import { useUSBPrinter } from '@/hooks/useUSBPrinter';
 import { PrinterSelector } from '@/components/PrinterSelector';
+import { Usb } from 'lucide-react';
 import type { BillData } from '@/services/thermalPrinter';
 import type { Database } from '@/integrations/supabase/types';
 import DashboardLayout from '@/components/layout/DashboardLayout';
