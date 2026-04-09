@@ -175,6 +175,7 @@ export default function Orders() {
   };
   
   const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing } = useThermalPrinter();
+  const { connectedPrinter: usbPrinter, printing: usbPrinting, isAvailable: isUSBAvailable, connectPrinter: connectUSB, disconnectPrinter: disconnectUSB, printBill: printUSB } = useUSBPrinter();
 
   const fetchData = useCallback(async () => {
     if (!currentRestaurant) return;

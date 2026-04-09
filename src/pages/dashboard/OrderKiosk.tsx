@@ -155,7 +155,8 @@ export default function OrderKiosk() {
   const [tableSearchQuery, setTableSearchQuery] = useState('');
   const isMobile = useIsMobile();
   
-  const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing } = useThermalPrinter(); // Thermal printer hook
+  const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing } = useThermalPrinter();
+  const { connectedPrinter: usbPrinter, printing: usbPrinting, isAvailable: isUSBAvailable, connectPrinter: connectUSB, disconnectPrinter: disconnectUSB, printBill: printUSB } = useUSBPrinter();
 
   const fetchData = async () => {
     if (!currentRestaurant) return;
