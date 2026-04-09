@@ -1771,19 +1771,33 @@ export default function OrderKiosk() {
 
             {/* Print Options */}
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => handlePrintBill(false)} disabled={printing}>
+              {/* USB Thermal Print - Primary */}
+              {isUSBAvailable && (
+                <Button 
+                  variant={usbPrinter ? 'default' : 'outline'}
+                  className={`flex-1 ${usbPrinter ? 'bg-primary' : ''}`}
+                  onClick={() => usbPrinter ? handlePrintBill('usb') : handleConnectUSB()}
+                  disabled={usbPrinting}
+                >
+                  <Usb className="w-4 h-4 mr-2" />
+                  {usbPrinter ? `Print (${usbPrinter.name.substring(0, 12)})` : 'Connect USB Printer'}
+                </Button>
+              )}
+              {/* Browser Print - Fallback */}
+              <Button variant="outline" className={isUSBAvailable ? '' : 'flex-1'} onClick={() => handlePrintBill('browser')} disabled={printing}>
                 <Printer className="w-4 h-4 mr-2" />
-                Browser Print
+                Browser
               </Button>
+              {/* Bluetooth - Mobile only */}
               {isBluetoothAvailable && (
                 <Button 
                   variant="outline" 
-                  className={`flex-1 ${connectedDevice ? 'border-success text-success' : ''}`}
-                  onClick={() => connectedDevice ? handlePrintBill(true) : setPrinterSelectorOpen(true)}
+                  className={connectedDevice ? 'border-success text-success' : ''}
+                  onClick={() => connectedDevice ? handlePrintBill('bluetooth') : setPrinterSelectorOpen(true)}
                   disabled={printing}
                 >
                   <Bluetooth className="w-4 h-4 mr-2" />
-                  {connectedDevice ? 'Thermal Print' : 'Connect Printer'}
+                  {connectedDevice ? 'BT' : 'BT'}
                 </Button>
               )}
             </div>
