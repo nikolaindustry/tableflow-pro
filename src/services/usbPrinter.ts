@@ -82,7 +82,7 @@ class USBPrinterService {
     }
 
     try {
-      const device = await usb.requestDevice({ filters: PRINTER_FILTERS });
+      const device = await usb.requestDevice({ filters: PRINTER_VENDOR_FILTERS });
       await this.connectDevice(device);
       return {
         name: device.productName || 'USB Printer',
