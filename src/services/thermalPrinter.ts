@@ -1,5 +1,5 @@
-// Thermal Printer Service - USB printing via local Express server API
-import { localApi } from './localApi';
+import { Capacitor } from '@capacitor/core';
+import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
 
 export interface PrinterDevice {
   name: string;
@@ -21,36 +21,69 @@ export interface BillData {
 }
 
 class ThermalPrinterService {
-  private connectedPrinter: string | null = null;
+  private connectedDevice: PrinterDevice | null = null;
+  private isNative = Capacitor.isNativePlatform();
 
   async isBluetoothAvailable(): Promise<boolean> {
-    // In desktop/localhost mode, we use USB printers via server API
-    // Return true to enable the printer button in UI
-    try {
-      const status = await localApi.getPrinterStatus();
-      return true;
-    } catch {
-      return false;
-    }
+    return this.isNative;
   }
 
   async scanDevices(): Promise<PrinterDevice[]> {
-    try {
-      const result = await localApi.listPrinters();
-      return (result.printers || []).map((name: string) => ({
-        name,
-        address: name,
-      }));
-    } catch (error) {
-      console.error('Failed to list printers:', error);
-      return [];
+    if (!this.isNative) {
+      throw new Error('Bluetooth scanning is only available on mobile devices');
     }
+
+    return new Promise(async (resolve, reject) => {
+      const devices: PrinterDevice[] = [];
+      let listenerHandle: { remove: () => void } | null = null;
+      
+      try {
+        // Set up listener for discovered devices
+        listenerHandle = await CapacitorThermalPrinter.addListener('discoverDevices', (data: any) => {
+          if (data.devices) {
+            data.devices.forEach((device: any) => {
+              if (!devices.find(d => d.address === device.address)) {
+                devices.push({
+                  name: device.name || 'Unknown Printer',
+                  address: device.address,
+                });
+              }
+            });
+          }
+        });
+
+        // Start scanning
+        await CapacitorThermalPrinter.startScan();
+        
+        // Stop scan after 5 seconds and resolve with found devices
+        setTimeout(async () => {
+          try {
+            await CapacitorThermalPrinter.stopScan();
+          } catch (e) {
+            // Ignore stop errors
+          }
+          if (listenerHandle) {
+            listenerHandle.remove();
+          }
+          resolve(devices);
+        }, 5000);
+      } catch (error) {
+        if (listenerHandle) {
+          listenerHandle.remove();
+        }
+        reject(new Error('Failed to scan for Bluetooth printers'));
+      }
+    });
   }
 
   async connect(device: PrinterDevice): Promise<void> {
+    if (!this.isNative) {
+      throw new Error('Bluetooth connection is only available on mobile devices');
+    }
+
     try {
-      await localApi.connectPrinter(device.name);
-      this.connectedPrinter = device.name;
+      await CapacitorThermalPrinter.connect({ address: device.address });
+      this.connectedDevice = device;
     } catch (error) {
       console.error('Failed to connect to printer:', error);
       throw new Error(`Failed to connect to ${device.name}`);
@@ -58,26 +91,88 @@ class ThermalPrinterService {
   }
 
   async disconnect(): Promise<void> {
+    if (!this.isNative || !this.connectedDevice) return;
+
     try {
-      await localApi.disconnectPrinter();
-      this.connectedPrinter = null;
+      await CapacitorThermalPrinter.disconnect();
+      this.connectedDevice = null;
     } catch (error) {
       console.error('Failed to disconnect printer:', error);
     }
   }
 
   getConnectedDevice(): PrinterDevice | null {
-    if (!this.connectedPrinter) return null;
-    return { name: this.connectedPrinter, address: this.connectedPrinter };
+    return this.connectedDevice;
   }
 
   async printViaBluetooth(bill: BillData): Promise<void> {
-    // "Bluetooth" in this context means USB thermal printing via server
+    if (!this.isNative) {
+      throw new Error('Bluetooth printing is only available on mobile devices');
+    }
+
+    if (!this.connectedDevice) {
+      throw new Error('No printer connected. Please connect a printer first.');
+    }
+
+    const billDate = new Date().toLocaleString('en-IN', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+
     try {
-      await localApi.printBill(bill);
+      // Build the receipt using ESC/POS commands
+      const printer = CapacitorThermalPrinter.begin()
+        .align('center')
+        .bold()
+        .doubleWidth()
+        .text(`${bill.restaurantName}\n`)
+        .clearFormatting()
+        .align('center');
+
+      if (bill.restaurantAddress) {
+        printer.text(`${bill.restaurantAddress}\n`);
+      }
+      if (bill.restaurantPhone) {
+        printer.text(`Phone: ${bill.restaurantPhone}\n`);
+      }
+      if (bill.restaurantGstin) {
+        printer.text(`GSTIN: ${bill.restaurantGstin}\n`);
+      }
+
+      printer
+        .text('--------------------------------\n')
+        .align('left')
+        .text(`Table: ${bill.tableNumber || 'Takeaway'}\n`)
+        .text(`Date: ${billDate}\n`)
+        .text('--------------------------------\n')
+        .bold()
+        .text('Item              Qty    Amount\n')
+        .clearFormatting()
+        .text('--------------------------------\n');
+
+      for (const item of bill.items) {
+        const itemName = item.name.substring(0, 16).padEnd(16);
+        const qty = String(item.quantity).padStart(3);
+        const amount = `₹${(item.price * item.quantity).toFixed(0)}`.padStart(8);
+        printer.text(`${itemName}${qty}${amount}\n`);
+      }
+
+      await printer
+        .text('--------------------------------\n')
+        .bold()
+        .align('right')
+        .text(`Grand Total: ₹${bill.total.toFixed(2)}\n`)
+        .clearFormatting()
+        .align('center')
+        .text('\n')
+        .text('Thank you for dining with us!\n')
+        .text('Please visit again\n')
+        .text('\n\n\n')
+        .cutPaper()
+        .write();
     } catch (error) {
-      console.error('USB print failed:', error);
-      throw new Error('Failed to print via USB thermal printer');
+      console.error('Bluetooth print failed:', error);
+      throw new Error('Failed to print via Bluetooth');
     }
   }
 

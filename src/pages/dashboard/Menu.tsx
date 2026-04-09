@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
-import { localApi } from '@/services/localApi';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -128,18 +128,36 @@ export default function Menu() {
     if (!currentRestaurant) return;
 
     try {
-      const [categoriesData, kitchensData] = await Promise.all([
-        localApi.getMenuCategories(currentRestaurant.id),
-        localApi.getKitchens(currentRestaurant.id, true),
+      const [categoriesRes, itemsRes, kitchensRes] = await Promise.all([
+        supabase
+          .from('menu_categories')
+          .select('*')
+          .eq('restaurant_id', currentRestaurant.id)
+          .order('sort_order', { ascending: true }),
+        supabase
+          .from('menu_items')
+          .select('*')
+          .in('category_id', (await supabase
+            .from('menu_categories')
+            .select('id')
+            .eq('restaurant_id', currentRestaurant.id)).data?.map(c => c.id) || []),
+        supabase
+          .from('kitchens')
+          .select('id, name')
+          .eq('restaurant_id', currentRestaurant.id)
+          .eq('is_active', true),
       ]);
 
-      setCategories(categoriesData || []);
+      if (categoriesRes.error) throw categoriesRes.error;
+      setCategories(categoriesRes.data || []);
       
-      // Fetch menu items
-      const itemsData = await localApi.getMenuItems(currentRestaurant.id);
-      setMenuItems(itemsData || []);
+      if (!itemsRes.error) {
+        setMenuItems(itemsRes.data || []);
+      }
       
-      setKitchens(kitchensData || []);
+      if (!kitchensRes.error) {
+        setKitchens(kitchensRes.data || []);
+      }
     } catch (error) {
       console.error('Error fetching menu data:', error);
     } finally {
@@ -177,20 +195,27 @@ export default function Menu() {
 
     try {
       if (editingCategory) {
-        await localApi.updateMenuCategory(editingCategory.id, {
-          name: categoryName,
-          description: categoryDescription || null,
-          is_active: categoryActive,
-        });
+        const { error } = await supabase
+          .from('menu_categories')
+          .update({
+            name: categoryName,
+            description: categoryDescription || null,
+            is_active: categoryActive,
+          })
+          .eq('id', editingCategory.id);
+
+        if (error) throw error;
         toast.success('Category updated successfully');
       } else {
-        await localApi.createMenuCategory({
+        const { error } = await supabase.from('menu_categories').insert({
           restaurant_id: currentRestaurant.id,
           name: categoryName,
           description: categoryDescription || null,
           is_active: categoryActive,
           sort_order: categories.length,
         });
+
+        if (error) throw error;
         toast.success('Category created successfully');
       }
 
@@ -206,7 +231,8 @@ export default function Menu() {
     if (!confirm('Are you sure? This will also delete all items in this category.')) return;
 
     try {
-      await localApi.deleteMenuCategory(id);
+      const { error } = await supabase.from('menu_categories').delete().eq('id', id);
+      if (error) throw error;
       toast.success('Category deleted');
       fetchData();
     } catch (error: any) {
@@ -264,10 +290,16 @@ export default function Menu() {
       };
 
       if (editingItem) {
-        await localApi.updateMenuItem(editingItem.id, itemData);
+        const { error } = await supabase
+          .from('menu_items')
+          .update(itemData)
+          .eq('id', editingItem.id);
+
+        if (error) throw error;
         toast.success('Menu item updated successfully');
       } else {
-        await localApi.createMenuItem(itemData);
+        const { error } = await supabase.from('menu_items').insert(itemData);
+        if (error) throw error;
         toast.success('Menu item created successfully');
       }
 
@@ -283,7 +315,8 @@ export default function Menu() {
     if (!confirm('Are you sure you want to delete this item?')) return;
 
     try {
-      await localApi.deleteMenuItem(id);
+      const { error } = await supabase.from('menu_items').delete().eq('id', id);
+      if (error) throw error;
       toast.success('Item deleted');
       fetchData();
     } catch (error: any) {
@@ -293,7 +326,12 @@ export default function Menu() {
 
   const toggleItemAvailability = async (item: MenuItem) => {
     try {
-      await localApi.updateMenuItem(item.id, { is_available: !item.is_available });
+      const { error } = await supabase
+        .from('menu_items')
+        .update({ is_available: !item.is_available })
+        .eq('id', item.id);
+
+      if (error) throw error;
       toast.success(`Item ${!item.is_available ? 'available' : 'unavailable'}`);
       fetchData();
     } catch (error: any) {

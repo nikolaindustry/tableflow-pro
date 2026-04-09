@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useRestaurant } from '@/contexts/RestaurantContext';
-import { localApi } from '@/services/localApi';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -145,8 +145,19 @@ export default function Reports() {
     if (!orderToDelete) return;
     
     try {
-      // Delete the order via local API
-      await localApi.deleteOrder(orderToDelete.id);
+      // First delete order items
+      await supabase
+        .from('order_items')
+        .delete()
+        .eq('order_id', orderToDelete.id);
+      
+      // Then delete the order
+      const { error } = await supabase
+        .from('orders')
+        .delete()
+        .eq('id', orderToDelete.id);
+      
+      if (error) throw error;
       
       setOrders(prev => prev.filter(o => o.id !== orderToDelete.id));
       toast({ title: 'Order deleted successfully' });
@@ -163,10 +174,15 @@ export default function Reports() {
     if (!orderToEdit) return;
     
     try {
-      await localApi.updateOrder(orderToEdit.id, {
-        payment_method: editPaymentMethod || null,
-        status: editStatus as OrderStatus,
-      });
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          payment_method: editPaymentMethod || null,
+          status: editStatus as OrderStatus,
+        })
+        .eq('id', orderToEdit.id);
+      
+      if (error) throw error;
       
       setOrders(prev => prev.map(o => 
         o.id === orderToEdit.id 
@@ -222,27 +238,52 @@ export default function Reports() {
       if (!currentRestaurant) return;
       setLoading(true);
 
-      const allOrders = await localApi.getOrders(currentRestaurant.id);
-      
-      if (allOrders) {
-        // Filter by date range client-side
-        const filtered = allOrders.filter((o: any) => {
-          const createdAt = new Date(o.created_at);
-          return createdAt >= getDateRange.from && createdAt <= getDateRange.to;
-        });
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          status,
+          total_amount,
+          created_at,
+          notes,
+          table_id,
+          payment_method,
+          order_items (
+            id,
+            quantity,
+            unit_price,
+            menu_item:menu_items (
+              name,
+              food_type
+            )
+          )
+        `)
+        .eq('restaurant_id', currentRestaurant.id)
+        .gte('created_at', getDateRange.from.toISOString())
+        .lte('created_at', getDateRange.to.toISOString())
+        .order('created_at', { ascending: false });
 
-        // Fetch table info for display
-        const tables = await localApi.getTables(currentRestaurant.id);
-        const tablesMap: Record<string, { table_number: string }> = {};
-        if (tables) {
-          tables.forEach((t: any) => { tablesMap[t.id] = t; });
+      if (!error && data) {
+        // Fetch table info separately
+        const tableIds = data.filter(o => o.table_id).map(o => o.table_id);
+        let tablesMap: Record<string, { table_number: string }> = {};
+        
+        if (tableIds.length > 0) {
+          const { data: tables } = await supabase
+            .from('tables')
+            .select('id, table_number')
+            .in('id', tableIds);
+          
+          if (tables) {
+            tablesMap = tables.reduce((acc, t) => ({ ...acc, [t.id]: t }), {});
+          }
         }
 
-        setOrders(filtered.map((order: any) => ({
+        setOrders(data.map(order => ({
           ...order,
           status: order.status as OrderStatus,
           table: order.table_id ? tablesMap[order.table_id] : null,
-          order_items: (order.order_items || []).map((item: any) => ({
+          order_items: order.order_items.map(item => ({
             ...item,
             menu_item: item.menu_item as { name: string; food_type: string } | null
           }))

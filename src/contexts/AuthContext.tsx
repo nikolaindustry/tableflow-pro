@@ -1,16 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { localAuth, isLocalMode } from '@/services/localApi';
-
-// Minimal User type matching what the app needs
-interface User {
-  id: string;
-  email?: string | null;
-}
-
-interface Session {
-  access_token: string;
-  user: User;
-}
+import { User, Session } from '@supabase/supabase-js';
+import { supabase } from '@/integrations/supabase/client';
 
 interface AuthContextType {
   user: User | null;
@@ -29,47 +19,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing local session
-    const existingUser = localAuth.getUser();
-    if (existingUser) {
-      setUser(existingUser);
-      setSession({ access_token: existingUser.id, user: existingUser });
-    }
-    setLoading(false);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+      }
+    );
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    try {
-      const { data, error } = await localAuth.signUp(email, password, fullName);
-      if (error) return { error: new Error(error.message || 'Sign up failed') };
-      if (data?.user) {
-        setUser(data.user);
-        setSession(data.session);
-      }
-      return { error: null };
-    } catch (err: any) {
-      return { error: new Error(err.message || 'Sign up failed') };
-    }
+    const redirectUrl = `${window.location.origin}/`;
+    
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: {
+          full_name: fullName,
+        },
+      },
+    });
+    return { error: error as Error | null };
   };
 
   const signIn = async (email: string, password: string) => {
-    try {
-      const { data, error } = await localAuth.signIn(email, password);
-      if (error) return { error: new Error(error.message || 'Sign in failed') };
-      if (data?.user) {
-        setUser(data.user);
-        setSession(data.session);
-      }
-      return { error: null };
-    } catch (err: any) {
-      return { error: new Error(err.message || 'Sign in failed') };
-    }
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    return { error: error as Error | null };
   };
 
   const signOut = async () => {
-    await localAuth.signOut();
-    setUser(null);
-    setSession(null);
+    await supabase.auth.signOut();
   };
 
   return (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
-import { localApi } from '@/services/localApi';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
@@ -36,23 +36,41 @@ export default function DashboardHome() {
 
     const fetchStats = async () => {
       try {
-        const [kitchens, floors, menuItems, orders] = await Promise.all([
-          localApi.getKitchens(currentRestaurant.id),
-          localApi.getFloors(currentRestaurant.id),
-          localApi.getMenuItems(currentRestaurant.id),
-          localApi.getOrders(currentRestaurant.id, 'active'),
+        const [kitchensRes, floorsRes, categoriesRes, ordersRes] = await Promise.all([
+          supabase
+            .from('kitchens')
+            .select('id', { count: 'exact' })
+            .eq('restaurant_id', currentRestaurant.id),
+          supabase
+            .from('floors')
+            .select('id, tables(id)', { count: 'exact' })
+            .eq('restaurant_id', currentRestaurant.id),
+          supabase
+            .from('menu_categories')
+            .select('id, menu_items(id)', { count: 'exact' })
+            .eq('restaurant_id', currentRestaurant.id),
+          supabase
+            .from('orders')
+            .select('id', { count: 'exact' })
+            .eq('restaurant_id', currentRestaurant.id)
+            .in('status', ['pending', 'cooking']),
         ]);
 
-        const tablesCount = floors?.reduce(
-          (acc: number, floor: any) => acc + (floor.tables?.length || 0),
+        const tablesCount = floorsRes.data?.reduce(
+          (acc, floor) => acc + (floor.tables?.length || 0),
+          0
+        ) || 0;
+
+        const menuItemsCount = categoriesRes.data?.reduce(
+          (acc, cat) => acc + (cat.menu_items?.length || 0),
           0
         ) || 0;
 
         setStats({
-          kitchens: kitchens?.length || 0,
+          kitchens: kitchensRes.count || 0,
           tables: tablesCount,
-          menuItems: menuItems?.length || 0,
-          activeOrders: orders?.length || 0,
+          menuItems: menuItemsCount,
+          activeOrders: ordersRes.count || 0,
         });
       } catch (error) {
         console.error('Error fetching stats:', error);

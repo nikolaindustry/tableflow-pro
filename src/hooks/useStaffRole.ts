@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { localApi } from '@/services/localApi';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { Database } from '@/integrations/supabase/types';
 
-type StaffRole = 'owner' | 'manager' | 'waiter' | 'chef' | 'cashier';
+type StaffRole = Database['public']['Enums']['staff_role'];
 
 interface StaffMemberInfo {
   id: string;
@@ -40,30 +41,66 @@ export function useStaffRole(): UseStaffRoleResult {
     }
 
     try {
-      // Link unlinked staff by email
-      await localApi.linkStaff(user.email || '', user.id).catch(() => {});
+      // First, try to link account if email matches an unlinked staff member
+      const { data: unlinkedStaff } = await supabase
+        .from('staff_members')
+        .select('id')
+        .eq('email', user.email || '')
+        .is('user_id', null)
+        .limit(1);
+
+      if (unlinkedStaff && unlinkedStaff.length > 0) {
+        // Link all staff records with this email to the user
+        await supabase
+          .from('staff_members')
+          .update({ user_id: user.id, joined_at: new Date().toISOString() })
+          .eq('email', user.email || '')
+          .is('user_id', null);
+      }
 
       // Fetch all staff memberships for this user
-      const restaurants = await localApi.getStaffRestaurants();
+      const { data: staffData, error } = await supabase
+        .from('staff_members')
+        .select(`
+          id,
+          restaurant_id,
+          role,
+          full_name,
+          email,
+          is_active,
+          restaurants (
+            id,
+            name,
+            slug
+          )
+        `)
+        .eq('user_id', user.id)
+        .eq('is_active', true);
 
-      if (restaurants && restaurants.length > 0) {
-        const firstStaff = restaurants[0];
+      if (error) throw error;
+
+      if (staffData && staffData.length > 0) {
+        // Set the first staff info
+        const firstStaff = staffData[0];
         setStaffInfo({
-          id: firstStaff.staff_id || firstStaff.id,
-          restaurant_id: firstStaff.restaurant_id || firstStaff.id,
+          id: firstStaff.id,
+          restaurant_id: firstStaff.restaurant_id,
           role: firstStaff.role,
-          full_name: firstStaff.full_name || '',
-          email: firstStaff.email || user.email || '',
-          is_active: true,
+          full_name: firstStaff.full_name,
+          email: firstStaff.email,
+          is_active: firstStaff.is_active,
         });
 
         // Build list of restaurants with roles
-        setStaffRestaurants(restaurants.map((s: any) => ({
-          id: s.restaurant_id || s.id,
-          name: s.name || s.restaurant_name || '',
-          slug: s.slug || '',
-          role: s.role,
-        })));
+        const restaurants = staffData
+          .filter(s => s.restaurants)
+          .map(s => ({
+            id: (s.restaurants as any).id,
+            name: (s.restaurants as any).name,
+            slug: (s.restaurants as any).slug,
+            role: s.role,
+          }));
+        setStaffRestaurants(restaurants);
       } else {
         setStaffInfo(null);
         setStaffRestaurants([]);
@@ -119,10 +156,16 @@ export function useStaffRoleForRestaurant(restaurantId: string | undefined): {
       }
 
       try {
-        // Get staff for this restaurant and find current user's role
-        const staffList = await localApi.getStaff(restaurantId);
-        const myStaff = staffList?.find((s: any) => s.user_id === user.id && s.is_active);
-        setRole(myStaff?.role || null);
+        const { data, error } = await supabase
+          .from('staff_members')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('restaurant_id', restaurantId)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (error) throw error;
+        setRole(data?.role || null);
       } catch (error) {
         console.error('Error fetching staff role:', error);
         setRole(null);

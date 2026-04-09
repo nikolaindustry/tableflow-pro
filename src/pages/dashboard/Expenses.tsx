@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useRestaurant } from "@/contexts/RestaurantContext";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { localApi } from "@/services/localApi";
+import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -91,45 +91,52 @@ export default function Expenses() {
   }, [restaurant?.id, dateRange]);
 
   const fetchCategories = async () => {
-    try {
-      const data = await localApi.getExpenseCategories(restaurant!.id);
-      if (data) setCategories(data);
-    } catch (e) { console.error(e); }
+    const { data } = await supabase
+      .from("expense_categories")
+      .select("*")
+      .eq("restaurant_id", restaurant!.id)
+      .order("name");
+    if (data) setCategories(data);
   };
 
   const fetchSuppliers = async () => {
-    try {
-      const data = await localApi.getSuppliers(restaurant!.id);
-      if (data) setSuppliers(data);
-    } catch (e) { console.error(e); }
+    const { data } = await supabase
+      .from("suppliers")
+      .select("*")
+      .eq("restaurant_id", restaurant!.id)
+      .order("name");
+    if (data) setSuppliers(data);
   };
 
   const fetchExpenses = async () => {
-    try {
-      const data = await localApi.getExpenses(restaurant!.id);
-      if (data) {
-        // Filter by date range client-side
-        const filtered = data.filter((e: any) => 
-          e.expense_date >= dateRange.start && e.expense_date <= dateRange.end
-        );
-        setExpenses(filtered);
-        setTotalExpenses(filtered.reduce((sum: number, e: any) => sum + Number(e.amount), 0));
-      }
-    } catch (e) { console.error(e); }
+    const { data } = await supabase
+      .from("expenses")
+      .select(`
+        *,
+        category:expense_categories(*),
+        supplier:suppliers(*)
+      `)
+      .eq("restaurant_id", restaurant!.id)
+      .gte("expense_date", dateRange.start)
+      .lte("expense_date", dateRange.end)
+      .order("expense_date", { ascending: false });
+    if (data) {
+      setExpenses(data);
+      setTotalExpenses(data.reduce((sum, e) => sum + Number(e.amount), 0));
+    }
   };
 
   const fetchEarnings = async () => {
-    try {
-      const orders = await localApi.getOrders(restaurant!.id);
-      if (orders) {
-        const served = orders.filter((o: any) => 
-          o.status === 'served' && 
-          o.created_at >= dateRange.start && 
-          o.created_at <= dateRange.end + 'T23:59:59'
-        );
-        setEarnings(served.reduce((sum: number, o: any) => sum + Number(o.total_amount), 0));
-      }
-    } catch (e) { console.error(e); }
+    const { data } = await supabase
+      .from("orders")
+      .select("total_amount")
+      .eq("restaurant_id", restaurant!.id)
+      .eq("status", "served")
+      .gte("created_at", dateRange.start)
+      .lte("created_at", dateRange.end + "T23:59:59");
+    if (data) {
+      setEarnings(data.reduce((sum, o) => sum + Number(o.total_amount), 0));
+    }
   };
 
   // Category handlers
@@ -140,19 +147,22 @@ export default function Expenses() {
     }
     setLoading(true);
     if (editingCategory) {
-      try {
-        await localApi.updateExpenseCategory(editingCategory.id, { name: categoryForm.name, description: categoryForm.description || null });
-        toast.success("Category updated");
-      } catch (e: any) { toast.error(e.message); }
+      const { error } = await supabase
+        .from("expense_categories")
+        .update({ name: categoryForm.name, description: categoryForm.description || null })
+        .eq("id", editingCategory.id);
+      if (error) toast.error(error.message);
+      else toast.success("Category updated");
     } else {
-      try {
-        await localApi.createExpenseCategory({ 
+      const { error } = await supabase
+        .from("expense_categories")
+        .insert({ 
           restaurant_id: restaurant!.id, 
           name: categoryForm.name, 
           description: categoryForm.description || null 
         });
-        toast.success("Category created");
-      } catch (e: any) { toast.error(e.message); }
+      if (error) toast.error(error.message);
+      else toast.success("Category created");
     }
     setLoading(false);
     setCategoryDialog(false);
@@ -163,10 +173,9 @@ export default function Expenses() {
 
   const handleDeleteCategory = async (id: string) => {
     if (!confirm("Delete this category?")) return;
-    try {
-      await localApi.deleteExpenseCategory(id);
-      toast.success("Category deleted"); fetchCategories();
-    } catch (e: any) { toast.error(e.message); }
+    const { error } = await supabase.from("expense_categories").delete().eq("id", id);
+    if (error) toast.error(error.message);
+    else { toast.success("Category deleted"); fetchCategories(); }
   };
 
   // Supplier handlers
@@ -184,15 +193,13 @@ export default function Expenses() {
       address: supplierForm.address || null
     };
     if (editingSupplier) {
-      try {
-        await localApi.updateSupplier(editingSupplier.id, payload);
-        toast.success("Supplier updated");
-      } catch (e: any) { toast.error(e.message); }
+      const { error } = await supabase.from("suppliers").update(payload).eq("id", editingSupplier.id);
+      if (error) toast.error(error.message);
+      else toast.success("Supplier updated");
     } else {
-      try {
-        await localApi.createSupplier({ ...payload, restaurant_id: restaurant!.id });
-        toast.success("Supplier created");
-      } catch (e: any) { toast.error(e.message); }
+      const { error } = await supabase.from("suppliers").insert({ ...payload, restaurant_id: restaurant!.id });
+      if (error) toast.error(error.message);
+      else toast.success("Supplier created");
     }
     setLoading(false);
     setSupplierDialog(false);
@@ -203,10 +210,9 @@ export default function Expenses() {
 
   const handleDeleteSupplier = async (id: string) => {
     if (!confirm("Delete this supplier?")) return;
-    try {
-      await localApi.deleteSupplier(id);
-      toast.success("Supplier deleted"); fetchSuppliers();
-    } catch (e: any) { toast.error(e.message); }
+    const { error } = await supabase.from("suppliers").delete().eq("id", id);
+    if (error) toast.error(error.message);
+    else { toast.success("Supplier deleted"); fetchSuppliers(); }
   };
 
   // Expense handlers
@@ -225,15 +231,13 @@ export default function Expenses() {
       supplier_id: expenseForm.supplier_id || null
     };
     if (editingExpense) {
-      try {
-        await localApi.updateExpense(editingExpense.id, payload);
-        toast.success("Expense updated");
-      } catch (e: any) { toast.error(e.message); }
+      const { error } = await supabase.from("expenses").update(payload).eq("id", editingExpense.id);
+      if (error) toast.error(error.message);
+      else toast.success("Expense updated");
     } else {
-      try {
-        await localApi.createExpense({ ...payload, restaurant_id: restaurant!.id });
-        toast.success("Expense recorded");
-      } catch (e: any) { toast.error(e.message); }
+      const { error } = await supabase.from("expenses").insert({ ...payload, restaurant_id: restaurant!.id });
+      if (error) toast.error(error.message);
+      else toast.success("Expense recorded");
     }
     setLoading(false);
     setExpenseDialog(false);
@@ -247,10 +251,9 @@ export default function Expenses() {
 
   const handleDeleteExpense = async (id: string) => {
     if (!confirm("Delete this expense?")) return;
-    try {
-      await localApi.deleteExpense(id);
-      toast.success("Expense deleted"); fetchExpenses();
-    } catch (e: any) { toast.error(e.message); }
+    const { error } = await supabase.from("expenses").delete().eq("id", id);
+    if (error) toast.error(error.message);
+    else { toast.success("Expense deleted"); fetchExpenses(); }
   };
 
   const openEditCategory = (cat: ExpenseCategory) => {

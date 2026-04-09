@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
-import { localApi } from '@/services/localApi';
-import { sseClient } from '@/services/sseClient';
+import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -156,32 +155,48 @@ export default function OrderKiosk() {
     if (!currentRestaurant) return;
 
     try {
-      const [floorsData, categoriesData] = await Promise.all([
-        localApi.getFloors(currentRestaurant.id),
-        localApi.getMenuCategories(currentRestaurant.id),
+      const [floorsRes, categoriesRes] = await Promise.all([
+        supabase
+          .from('floors')
+          .select('*, tables(*)')
+          .eq('restaurant_id', currentRestaurant.id)
+          .order('floor_number', { ascending: true }),
+        supabase
+          .from('menu_categories')
+          .select('id, name, is_active')
+          .eq('restaurant_id', currentRestaurant.id)
+          .eq('is_active', true)
+          .order('sort_order', { ascending: true }),
       ]);
 
-      setFloors(floorsData || []);
-      setCategories(categoriesData || []);
+      if (floorsRes.error) throw floorsRes.error;
+      if (categoriesRes.error) throw categoriesRes.error;
+
+      setFloors(floorsRes.data || []);
+      setCategories(categoriesRes.data || []);
       
-      if (floorsData && floorsData.length > 0 && !selectedFloorId) {
-        setSelectedFloorId(floorsData[0].id);
+      if (floorsRes.data && floorsRes.data.length > 0 && !selectedFloorId) {
+        setSelectedFloorId(floorsRes.data[0].id);
       }
 
       // Fetch occupation times for occupied tables
-      const occupiedTableIds = floorsData
+      const occupiedTableIds = floorsRes.data
         ?.flatMap(f => f.tables)
         ?.filter(t => t.is_occupied)
         ?.map(t => t.id) || [];
 
       if (occupiedTableIds.length > 0) {
-        // Get active orders from local API to determine occupation times
-        const ordersData = await localApi.getOrders(currentRestaurant.id, 'active');
+        const { data: ordersData } = await supabase
+          .from('orders')
+          .select('table_id, created_at')
+          .in('table_id', occupiedTableIds)
+          .in('status', ['pending', 'cooking', 'ready'])
+          .order('created_at', { ascending: true });
 
         if (ordersData) {
           const times: Record<string, string> = {};
-          ordersData.forEach((order: any) => {
-            if (order.table_id && occupiedTableIds.includes(order.table_id) && !times[order.table_id]) {
+          ordersData.forEach(order => {
+            if (!times[order.table_id]) {
               times[order.table_id] = order.created_at;
             }
           });
@@ -190,9 +205,17 @@ export default function OrderKiosk() {
       }
 
       // Fetch menu items for all categories
-      if (categoriesData && categoriesData.length > 0) {
-        const itemsData = await localApi.getMenuItems(currentRestaurant.id, true);
-        setMenuItems(itemsData || []);
+      if (categoriesRes.data && categoriesRes.data.length > 0) {
+        const categoryIds = categoriesRes.data.map(c => c.id);
+        const { data: itemsData, error: itemsError } = await supabase
+          .from('menu_items')
+          .select('*')
+          .in('category_id', categoryIds)
+          .eq('is_available', true);
+
+        if (!itemsError) {
+          setMenuItems(itemsData || []);
+        }
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -203,16 +226,25 @@ export default function OrderKiosk() {
 
   const fetchActiveOrder = async (tableId: string) => {
     try {
-      const data = await localApi.getOrders(currentRestaurant.id, 'active');
+      // Fetch ALL active orders for this table (not just one)
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          id, status, total_amount, created_at,
+          order_items (id, menu_item_id, quantity, unit_price, status)
+        `)
+        .eq('table_id', tableId)
+        .in('status', ['pending', 'cooking', 'ready'])
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
       
       if (data && data.length > 0) {
-        // Filter orders for this specific table
-        const tableOrders = data.filter((o: any) => o.table_id === tableId);
         // Combine all orders into one consolidated view
         const allItems: any[] = [];
         let totalAmount = 0;
         
-        for (const order of tableOrders) {
+        for (const order of data) {
           totalAmount += order.total_amount;
           for (const item of order.order_items) {
             // Skip served items - they shouldn't appear in active order view
@@ -224,7 +256,7 @@ export default function OrderKiosk() {
         
         // Use the first order as the base but include all items
         setActiveOrder({ 
-          ...tableOrders[0], 
+          ...data[0], 
           items: allItems,
           total_amount: totalAmount
         });
@@ -252,30 +284,92 @@ export default function OrderKiosk() {
 
     console.log('Setting up realtime subscription for order:', activeOrder.id);
 
-    // Subscribe to order status changes via SSE
-    const unsub1 = sseClient.on('order_change', (payload: any) => {
-      if (selectedTable) fetchActiveOrder(selectedTable.id);
-      if (payload?.status === 'ready') {
-        toast.success('Order is ready for serving!', {
-          icon: <CheckCircle2 className="w-5 h-5 text-success" />,
-          duration: 5000
-        });
-      } else if (payload?.status === 'cooking') {
-        toast.info('Kitchen started cooking your order', {
-          icon: <ChefHat className="w-5 h-5" />,
-          duration: 3000
-        });
-      }
-    });
+    // Subscribe to order status changes
+    const orderChannel = supabase
+      .channel(`order-${activeOrder.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `id=eq.${activeOrder.id}`
+        },
+        (payload) => {
+          console.log('Order updated:', payload);
+          const newStatus = payload.new.status;
+          setActiveOrder(prev => prev ? { ...prev, status: newStatus } : null);
+          
+          if (newStatus === 'ready') {
+            toast.success('Order is ready for serving!', {
+              icon: <CheckCircle2 className="w-5 h-5 text-success" />,
+              duration: 5000
+            });
+          } else if (newStatus === 'cooking') {
+            toast.info('Kitchen started cooking your order', {
+              icon: <ChefHat className="w-5 h-5" />,
+              duration: 3000
+            });
+          }
+        }
+      )
+      .subscribe();
 
-    // Subscribe to order item status changes via SSE
-    const unsub2 = sseClient.on('order_items_change', () => {
-      if (selectedTable) fetchActiveOrder(selectedTable.id);
-    });
+    // Subscribe to order item status changes
+    const itemsChannel = supabase
+      .channel(`order-items-${activeOrder.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'order_items',
+          filter: `order_id=eq.${activeOrder.id}`
+        },
+        (payload) => {
+          console.log('Order item updated:', payload);
+          const updatedItem = payload.new as any;
+          
+          setActiveOrder(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              items: prev.items.map(item =>
+                item.id === updatedItem.id
+                  ? { ...item, status: updatedItem.status }
+                  : item
+              )
+            };
+          });
+
+          // Also update cart item status - only for items that ALREADY have a status (existing order items)
+          // New items (without status) should NOT be affected by status updates from existing items
+          setCart(prev => prev.map(cartItem => {
+            // Only update if this cart item already has a status (is an existing order item)
+            // AND matches the updated item's menu_item_id
+            if (cartItem.status && cartItem.menuItem.id === updatedItem.menu_item_id) {
+              return { ...cartItem, status: updatedItem.status };
+            }
+            return cartItem;
+          }));
+
+          // Find the item name for the toast
+          const itemName = activeOrder.items.find(i => i.id === updatedItem.id)?.menu_item?.name || 'Item';
+          
+          if (updatedItem.status === 'ready') {
+            toast.success(`${itemName} is ready!`, {
+              icon: <CheckCircle2 className="w-5 h-5 text-success" />,
+              duration: 4000
+            });
+          }
+        }
+      )
+      .subscribe();
 
     return () => {
-      unsub1();
-      unsub2();
+      console.log('Cleaning up realtime subscriptions');
+      supabase.removeChannel(orderChannel);
+      supabase.removeChannel(itemsChannel);
     };
   }, [selectedTable?.id, activeOrder?.id]);
 
@@ -283,13 +377,39 @@ export default function OrderKiosk() {
   useEffect(() => {
     if (!currentRestaurant) return;
 
-    // Subscribe to table status changes via SSE
-    const unsub = sseClient.on('table_change', () => {
-      fetchData();
-    });
+    const tablesChannel = supabase
+      .channel('tables-status')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'tables',
+        },
+        (payload) => {
+          console.log('Table status updated:', payload);
+          const updatedTable = payload.new as any;
+          
+          // Update local floors/tables state
+          setFloors(prev => prev.map(floor => ({
+            ...floor,
+            tables: floor.tables.map(table =>
+              table.id === updatedTable.id
+                ? { ...table, is_occupied: updatedTable.is_occupied }
+                : table
+            )
+          })));
+
+          // If this is the selected table and it was freed, show notification
+          if (selectedTable?.id === updatedTable.id && !updatedTable.is_occupied) {
+            toast.info('Table has been freed');
+          }
+        }
+      )
+      .subscribe();
 
     return () => {
-      unsub();
+      supabase.removeChannel(tablesChannel);
     };
   }, [currentRestaurant, selectedTable?.id]);
 
@@ -301,10 +421,17 @@ export default function OrderKiosk() {
     if (table.is_occupied) {
       try {
         // Fetch ALL active orders for this table
-        const allOrders = await localApi.getOrders(currentRestaurant.id, 'active');
-        const data = allOrders.filter((o: any) => o.table_id === table.id);
+        const { data, error } = await supabase
+          .from('orders')
+          .select(`
+            id, status, total_amount, created_at,
+            order_items (id, menu_item_id, quantity, unit_price, status)
+          `)
+          .eq('table_id', table.id)
+          .in('status', ['pending', 'cooking', 'ready'])
+          .order('created_at', { ascending: true });
 
-        if (data && data.length > 0) {
+        if (!error && data && data.length > 0) {
           // Populate cart with ALL existing order items from ALL orders
           const cartItems: CartItem[] = [];
           const allItems: any[] = [];
@@ -353,7 +480,10 @@ export default function OrderKiosk() {
       }
     } else {
       // Mark table as occupied if not already
-      await localApi.updateTable(table.id, { is_occupied: true });
+      await supabase
+        .from('tables')
+        .update({ is_occupied: true })
+        .eq('id', table.id);
       
       // Update local state
       setFloors(floors.map(f => ({
@@ -404,7 +534,12 @@ export default function OrderKiosk() {
       if (reduceBy && reduceBy < currentQuantity) {
         // Reduce quantity
         const newQuantity = currentQuantity - reduceBy;
-        await localApi.updateOrderItem(itemId, { quantity: newQuantity });
+        const { error } = await supabase
+          .from('order_items')
+          .update({ quantity: newQuantity })
+          .eq('id', itemId);
+        
+        if (error) throw error;
         
         // Update cart
         setCart(prev => prev.map(item => 
@@ -426,7 +561,12 @@ export default function OrderKiosk() {
         toast.success('Item quantity updated');
       } else {
         // Cancel entire item (set status to cancelled)
-        await localApi.updateOrderItem(itemId, { status: 'cancelled' });
+        const { error } = await supabase
+          .from('order_items')
+          .update({ status: 'cancelled' })
+          .eq('id', itemId);
+        
+        if (error) throw error;
         
         // Remove from cart
         setCart(prev => prev.filter(item => !(item.menuItem.id === menuItemId && item.status)));
@@ -514,20 +654,35 @@ export default function OrderKiosk() {
       // This ensures proper tracking and billing for items ordered after previous orders were served
       const newItemsTotal = newItems.reduce((sum, item) => sum + item.menuItem.price * item.quantity, 0);
       
-      await localApi.createOrder({
-        restaurant_id: currentRestaurant.id,
-        table_id: selectedTable.id,
-        total_amount: newItemsTotal,
-        status: 'pending',
-        items: newItems.map(item => ({
-          menu_item_id: item.menuItem.id,
-          kitchen_id: item.menuItem.kitchen_id,
-          quantity: item.quantity,
-          unit_price: item.menuItem.price,
-          notes: item.notes || null,
-          status: 'pending',
-        })),
-      });
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          restaurant_id: currentRestaurant.id,
+          table_id: selectedTable.id,
+          total_amount: newItemsTotal,
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+
+      // Create order items only for new items
+      const orderItems = newItems.map(item => ({
+        order_id: order.id,
+        menu_item_id: item.menuItem.id,
+        kitchen_id: item.menuItem.kitchen_id,
+        quantity: item.quantity,
+        unit_price: item.menuItem.price,
+        notes: item.notes || null,
+        status: 'pending' as const
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+
+      if (itemsError) throw itemsError;
 
       toast.success('Order sent to kitchen!');
       
@@ -547,7 +702,18 @@ export default function OrderKiosk() {
     if (!selectedTable) return;
     
     try {
-      await localApi.updateTable(selectedTable.id, { is_occupied: false });
+      await supabase
+        .from('tables')
+        .update({ is_occupied: false })
+        .eq('id', selectedTable.id);
+      
+      // Update local state
+      setFloors(floors.map(f => ({
+        ...f,
+        tables: f.tables.map(t => 
+          t.id === selectedTable.id ? { ...t, is_occupied: false } : t
+        )
+      })));
       
       handleCloseOrder();
       toast.success('Table marked as available');
@@ -579,11 +745,26 @@ export default function OrderKiosk() {
     
     setProcessingPayment(true);
     try {
-      // Mark all active orders for this table as served
-      await localApi.updateOrder(activeOrder.id, { status: 'served' });
-      
+      // Mark all orders for this table as served
+      await supabase
+        .from('orders')
+        .update({ status: 'served' })
+        .eq('table_id', selectedTable.id)
+        .in('status', ['pending', 'cooking', 'ready']);
+
       // Mark table as free
-      await localApi.updateTable(selectedTable.id, { is_occupied: false });
+      await supabase
+        .from('tables')
+        .update({ is_occupied: false })
+        .eq('id', selectedTable.id);
+
+      // Update local floors state
+      setFloors(floors.map(f => ({
+        ...f,
+        tables: f.tables.map(t => 
+          t.id === selectedTable.id ? { ...t, is_occupied: false } : t
+        )
+      })));
 
       setShowBillDialog(false);
       toast.success(`Payment received via ${paymentMethod.toUpperCase()}`);

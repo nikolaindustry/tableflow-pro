@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
-import { localApi } from '@/services/localApi';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -62,7 +62,13 @@ export default function Floors() {
     if (!currentRestaurant) return;
 
     try {
-      const data = await localApi.getFloors(currentRestaurant.id);
+      const { data, error } = await supabase
+        .from('floors')
+        .select('*, tables(*)')
+        .eq('restaurant_id', currentRestaurant.id)
+        .order('floor_number', { ascending: true });
+
+      if (error) throw error;
       setFloors(data || []);
       if (data && data.length > 0 && !selectedFloorId) {
         setSelectedFloorId(data[0].id);
@@ -120,14 +126,21 @@ export default function Floors() {
 
     try {
       if (editingFloor) {
-        await localApi.updateFloor(editingFloor.id, { name: floorName, floor_number: parseInt(floorNumber) });
+        const { error } = await supabase
+          .from('floors')
+          .update({ name: floorName, floor_number: parseInt(floorNumber) })
+          .eq('id', editingFloor.id);
+
+        if (error) throw error;
         toast.success('Floor updated successfully');
       } else {
-        await localApi.createFloor({
+        const { error } = await supabase.from('floors').insert({
           restaurant_id: currentRestaurant.id,
           name: floorName,
           floor_number: parseInt(floorNumber),
         });
+
+        if (error) throw error;
         toast.success('Floor created successfully');
       }
 
@@ -147,14 +160,21 @@ export default function Floors() {
 
     try {
       if (editingTable) {
-        await localApi.updateTable(editingTable.id, { table_number: tableNumber, capacity: parseInt(tableCapacity) });
+        const { error } = await supabase
+          .from('tables')
+          .update({ table_number: tableNumber, capacity: parseInt(tableCapacity) })
+          .eq('id', editingTable.id);
+
+        if (error) throw error;
         toast.success('Table updated successfully');
       } else {
-        await localApi.createTable({
+        const { error } = await supabase.from('tables').insert({
           floor_id: floorId,
           table_number: tableNumber,
           capacity: parseInt(tableCapacity),
         });
+
+        if (error) throw error;
         toast.success('Table created successfully');
       }
 
@@ -170,7 +190,8 @@ export default function Floors() {
     if (!confirm('Are you sure? This will delete all tables on this floor.')) return;
 
     try {
-      await localApi.deleteFloor(id);
+      const { error } = await supabase.from('floors').delete().eq('id', id);
+      if (error) throw error;
       toast.success('Floor deleted');
       fetchFloors();
     } catch (error: any) {
@@ -182,7 +203,8 @@ export default function Floors() {
     if (!confirm('Are you sure you want to delete this table?')) return;
 
     try {
-      await localApi.deleteTable(id);
+      const { error } = await supabase.from('tables').delete().eq('id', id);
+      if (error) throw error;
       toast.success('Table deleted');
       fetchFloors();
     } catch (error: any) {
