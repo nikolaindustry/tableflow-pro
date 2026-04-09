@@ -149,6 +149,8 @@ export default function OrderKiosk() {
   const [cancellingItem, setCancellingItem] = useState(false);
   const [printerSelectorOpen, setPrinterSelectorOpen] = useState(false);
   const [tableOccupationTimes, setTableOccupationTimes] = useState<Record<string, string>>({});
+  const [tableViewMode, setTableViewMode] = useState<'grid' | 'list'>('grid');
+  const [tableSearchQuery, setTableSearchQuery] = useState('');
   const isMobile = useIsMobile();
   
   const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing } = useThermalPrinter(); // Thermal printer hook
