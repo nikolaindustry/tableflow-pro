@@ -1023,44 +1023,41 @@ export default function OrderKiosk() {
                                 {filteredTables.filter(t => t.is_occupied).length}/{filteredTables.length} occupied
                               </Badge>
                             </div>
-                            <div className="space-y-1.5">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                               {filteredTables.map((table) => (
                                 <button
                                   key={table.id}
                                   onClick={() => handleTableClick(table)}
-                                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all hover:shadow-sm ${
+                                  className={`group relative rounded-2xl p-5 transition-all duration-300 hover:scale-[1.03] hover:-translate-y-1 ${
                                     table.is_occupied
-                                      ? 'bg-destructive/5 border-destructive/20 hover:border-destructive/40'
-                                      : 'bg-card border-border hover:border-primary/30'
+                                      ? 'bg-gradient-to-br from-destructive/5 to-destructive/15 border-2 border-destructive/30 hover:border-destructive/50 hover:shadow-lg hover:shadow-destructive/10'
+                                      : 'bg-gradient-to-br from-success/5 to-success/15 border-2 border-success/30 hover:border-success/50 hover:shadow-lg hover:shadow-success/10'
                                   }`}
                                 >
-                                  {/* Table number */}
-                                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center font-bold text-lg shrink-0 ${
-                                    table.is_occupied ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success'
-                                  }`}>
-                                    {table.table_number}
-                                  </div>
-                                  
-                                  {/* Info */}
-                                  <div className="flex-1 text-left min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-medium text-foreground">Table {table.table_number}</span>
-                                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                        table.is_occupied ? 'bg-destructive/15 text-destructive' : 'bg-success/15 text-success'
-                                      }`}>
-                                        {table.is_occupied ? 'Occupied' : 'Free'}
+                                  <div className={`absolute top-3 right-3 w-2.5 h-2.5 rounded-full ${
+                                    table.is_occupied ? 'bg-destructive animate-pulse' : 'bg-success'
+                                  }`} />
+                                  <div className="flex flex-col items-center justify-center py-3">
+                                    <div className={`w-16 h-16 rounded-xl flex items-center justify-center mb-3 transition-colors ${
+                                      table.is_occupied ? 'bg-destructive/10 group-hover:bg-destructive/15' : 'bg-success/10 group-hover:bg-success/15'
+                                    }`}>
+                                      <span className={`text-2xl font-bold ${table.is_occupied ? 'text-destructive' : 'text-success'}`}>
+                                        {table.table_number}
                                       </span>
                                     </div>
-                                    <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-                                      <span className="flex items-center gap-1"><Users className="w-3 h-3" />{table.capacity} seats</span>
-                                      {table.is_occupied && tableOccupationTimes[table.id] && (
-                                        <TableOccupiedTimer occupiedSince={tableOccupationTimes[table.id]} />
-                                      )}
+                                    <div className="flex items-center gap-1.5 text-muted-foreground mb-2">
+                                      <Users className="w-4 h-4" />
+                                      <span className="text-sm font-medium">{table.capacity} seats</span>
                                     </div>
+                                    {table.is_occupied ? (
+                                      <div className="flex flex-col items-center gap-1">
+                                        <span className="text-xs font-semibold px-3 py-1 rounded-full bg-destructive/15 text-destructive">Occupied</span>
+                                        <TableOccupiedTimer occupiedSince={tableOccupationTimes[table.id] || null} />
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs font-semibold px-3 py-1 rounded-full bg-success/15 text-success">Available</span>
+                                    )}
                                   </div>
-
-                                  {/* Arrow */}
-                                  <ArrowLeft className="w-4 h-4 text-muted-foreground rotate-180 shrink-0" />
                                 </button>
                               ))}
                             </div>
