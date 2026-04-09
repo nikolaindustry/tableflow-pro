@@ -34,6 +34,8 @@ import {
   Printer,
   Wallet,
   Bluetooth,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { TableOccupiedTimer } from '@/components/TableOccupiedTimer';
