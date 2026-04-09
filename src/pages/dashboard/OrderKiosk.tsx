@@ -885,99 +885,190 @@ export default function OrderKiosk() {
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {!selectedTable ? (
             // Table Selection View
-            <div className="flex-1 p-6 overflow-auto">
+            <div className="flex-1 p-4 md:p-6 overflow-auto">
               <div className="max-w-6xl mx-auto">
-                <div className="text-center mb-8">
-                  <h2 className="text-2xl font-bold text-foreground mb-2">Select a Table</h2>
-                  <p className="text-muted-foreground">Choose a table to start taking orders</p>
-                </div>
-                
-                <Tabs value={selectedFloorId} onValueChange={setSelectedFloorId} className="h-full flex flex-col">
-                  <div className="flex justify-start mb-8">
-                    <TabsList className="bg-secondary/50 p-1.5 rounded-2xl shadow-sm">
-                      {floors.map((floor) => (
-                        <TabsTrigger 
-                          key={floor.id} 
-                          value={floor.id}
-                          className="data-[state=active]:bg-card data-[state=active]:shadow-md rounded-xl px-6 py-2.5 font-medium transition-all"
-                        >
-                          {floor.name}
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
+                {/* Header with search and view toggle */}
+                <div className="flex flex-col gap-4 mb-6">
+                  <div className="text-center">
+                    <h2 className="text-2xl font-bold text-foreground mb-1">Select a Table</h2>
+                    <p className="text-muted-foreground text-sm">Choose a table to start taking orders</p>
                   </div>
+                  
+                  {/* Search bar and view toggle */}
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search table number or floor..."
+                        value={tableSearchQuery}
+                        onChange={(e) => setTableSearchQuery(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                    <div className="flex border rounded-lg overflow-hidden shrink-0">
+                      <Button
+                        size="icon"
+                        variant={tableViewMode === 'grid' ? 'default' : 'ghost'}
+                        className="rounded-none h-9 w-9"
+                        onClick={() => setTableViewMode('grid')}
+                      >
+                        <LayoutGrid className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant={tableViewMode === 'list' ? 'default' : 'ghost'}
+                        className="rounded-none h-9 w-9"
+                        onClick={() => setTableViewMode('list')}
+                      >
+                        <List className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
 
-                  {floors.map((floor) => (
-                    <TabsContent key={floor.id} value={floor.id} className="flex-1 mt-0 animate-fade-in">
-                      {floor.tables.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-                          <Users className="w-12 h-12 mb-4 opacity-30" />
-                          <p className="text-lg">No tables on this floor</p>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                          {floor.tables
-                            .sort((a, b) => a.table_number.localeCompare(b.table_number))
-                            .map((table) => (
-                              <button
-                                key={table.id}
-                                onClick={() => handleTableClick(table)}
-                                className={`group relative rounded-2xl p-5 transition-all duration-300 hover:scale-[1.03] hover:-translate-y-1 ${
-                                  table.is_occupied
-                                    ? 'bg-gradient-to-br from-destructive/5 to-destructive/15 border-2 border-destructive/30 hover:border-destructive/50 hover:shadow-lg hover:shadow-destructive/10'
-                                    : 'bg-gradient-to-br from-success/5 to-success/15 border-2 border-success/30 hover:border-success/50 hover:shadow-lg hover:shadow-success/10'
-                                }`}
-                              >
-                                {/* Status indicator dot */}
-                                <div className={`absolute top-3 right-3 w-2.5 h-2.5 rounded-full ${
-                                  table.is_occupied 
-                                    ? 'bg-destructive animate-pulse' 
-                                    : 'bg-success'
-                                }`} />
-                                
-                                <div className="flex flex-col items-center justify-center py-3">
-                                  {/* Table icon/representation */}
-                                  <div className={`w-16 h-16 rounded-xl flex items-center justify-center mb-3 transition-colors ${
+                {tableViewMode === 'grid' ? (
+                  /* GRID VIEW - existing tab-based view */
+                  <Tabs value={selectedFloorId} onValueChange={setSelectedFloorId} className="h-full flex flex-col">
+                    <div className="flex justify-start mb-6">
+                      <TabsList className="bg-secondary/50 p-1.5 rounded-2xl shadow-sm">
+                        {floors.filter(f => !tableSearchQuery || f.name.toLowerCase().includes(tableSearchQuery.toLowerCase()) || f.tables.some(t => t.table_number.toLowerCase().includes(tableSearchQuery.toLowerCase()))).map((floor) => (
+                          <TabsTrigger 
+                            key={floor.id} 
+                            value={floor.id}
+                            className="data-[state=active]:bg-card data-[state=active]:shadow-md rounded-xl px-6 py-2.5 font-medium transition-all"
+                          >
+                            {floor.name}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                    </div>
+
+                    {floors.map((floor) => {
+                      const filteredTables = floor.tables
+                        .filter(t => !tableSearchQuery || t.table_number.toLowerCase().includes(tableSearchQuery.toLowerCase()))
+                        .sort((a, b) => a.table_number.localeCompare(b.table_number));
+
+                      return (
+                        <TabsContent key={floor.id} value={floor.id} className="flex-1 mt-0 animate-fade-in">
+                          {filteredTables.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+                              <Users className="w-12 h-12 mb-4 opacity-30" />
+                              <p className="text-lg">{tableSearchQuery ? 'No matching tables' : 'No tables on this floor'}</p>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                              {filteredTables.map((table) => (
+                                <button
+                                  key={table.id}
+                                  onClick={() => handleTableClick(table)}
+                                  className={`group relative rounded-2xl p-5 transition-all duration-300 hover:scale-[1.03] hover:-translate-y-1 ${
                                     table.is_occupied
-                                      ? 'bg-destructive/10 group-hover:bg-destructive/15'
-                                      : 'bg-success/10 group-hover:bg-success/15'
-                                  }`}>
-                                    <span className={`text-2xl font-bold ${
-                                      table.is_occupied ? 'text-destructive' : 'text-success'
+                                      ? 'bg-gradient-to-br from-destructive/5 to-destructive/15 border-2 border-destructive/30 hover:border-destructive/50 hover:shadow-lg hover:shadow-destructive/10'
+                                      : 'bg-gradient-to-br from-success/5 to-success/15 border-2 border-success/30 hover:border-success/50 hover:shadow-lg hover:shadow-success/10'
+                                  }`}
+                                >
+                                  <div className={`absolute top-3 right-3 w-2.5 h-2.5 rounded-full ${
+                                    table.is_occupied ? 'bg-destructive animate-pulse' : 'bg-success'
+                                  }`} />
+                                  <div className="flex flex-col items-center justify-center py-3">
+                                    <div className={`w-16 h-16 rounded-xl flex items-center justify-center mb-3 transition-colors ${
+                                      table.is_occupied ? 'bg-destructive/10 group-hover:bg-destructive/15' : 'bg-success/10 group-hover:bg-success/15'
                                     }`}>
-                                      {table.table_number}
-                                    </span>
-                                  </div>
-                                  
-                                  {/* Capacity */}
-                                  <div className="flex items-center gap-1.5 text-muted-foreground mb-2">
-                                    <Users className="w-4 h-4" />
-                                    <span className="text-sm font-medium">{table.capacity} seats</span>
-                                  </div>
-                                  
-                                  {/* Status badge or timer */}
-                                  {table.is_occupied ? (
-                                    <div className="flex flex-col items-center gap-1">
-                                      <span className="text-xs font-semibold px-3 py-1 rounded-full bg-destructive/15 text-destructive">
-                                        Occupied
+                                      <span className={`text-2xl font-bold ${table.is_occupied ? 'text-destructive' : 'text-success'}`}>
+                                        {table.table_number}
                                       </span>
-                                      <TableOccupiedTimer 
-                                        occupiedSince={tableOccupationTimes[table.id] || null} 
-                                      />
                                     </div>
-                                  ) : (
-                                    <span className="text-xs font-semibold px-3 py-1 rounded-full bg-success/15 text-success">
-                                      Available
-                                    </span>
-                                  )}
-                                </div>
-                              </button>
-                            ))}
-                        </div>
-                      )}
-                    </TabsContent>
-                  ))}
-                </Tabs>
+                                    <div className="flex items-center gap-1.5 text-muted-foreground mb-2">
+                                      <Users className="w-4 h-4" />
+                                      <span className="text-sm font-medium">{table.capacity} seats</span>
+                                    </div>
+                                    {table.is_occupied ? (
+                                      <div className="flex flex-col items-center gap-1">
+                                        <span className="text-xs font-semibold px-3 py-1 rounded-full bg-destructive/15 text-destructive">Occupied</span>
+                                        <TableOccupiedTimer occupiedSince={tableOccupationTimes[table.id] || null} />
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs font-semibold px-3 py-1 rounded-full bg-success/15 text-success">Available</span>
+                                    )}
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </TabsContent>
+                      );
+                    })}
+                  </Tabs>
+                ) : (
+                  /* LIST VIEW - all floors, occupied first */
+                  <div className="space-y-4">
+                    {floors
+                      .filter(f => !tableSearchQuery || f.name.toLowerCase().includes(tableSearchQuery.toLowerCase()) || f.tables.some(t => t.table_number.toLowerCase().includes(tableSearchQuery.toLowerCase())))
+                      .map((floor) => {
+                        const filteredTables = floor.tables
+                          .filter(t => !tableSearchQuery || t.table_number.toLowerCase().includes(tableSearchQuery.toLowerCase()))
+                          .sort((a, b) => {
+                            // Occupied first, then by table number
+                            if (a.is_occupied !== b.is_occupied) return a.is_occupied ? -1 : 1;
+                            return a.table_number.localeCompare(b.table_number);
+                          });
+
+                        if (filteredTables.length === 0) return null;
+
+                        return (
+                          <div key={floor.id}>
+                            <div className="flex items-center gap-2 mb-2 px-1">
+                              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{floor.name}</h3>
+                              <Badge variant="secondary" className="text-xs">
+                                {filteredTables.filter(t => t.is_occupied).length}/{filteredTables.length} occupied
+                              </Badge>
+                            </div>
+                            <div className="space-y-1.5">
+                              {filteredTables.map((table) => (
+                                <button
+                                  key={table.id}
+                                  onClick={() => handleTableClick(table)}
+                                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all hover:shadow-sm ${
+                                    table.is_occupied
+                                      ? 'bg-destructive/5 border-destructive/20 hover:border-destructive/40'
+                                      : 'bg-card border-border hover:border-primary/30'
+                                  }`}
+                                >
+                                  {/* Table number */}
+                                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center font-bold text-lg shrink-0 ${
+                                    table.is_occupied ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success'
+                                  }`}>
+                                    {table.table_number}
+                                  </div>
+                                  
+                                  {/* Info */}
+                                  <div className="flex-1 text-left min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium text-foreground">Table {table.table_number}</span>
+                                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                        table.is_occupied ? 'bg-destructive/15 text-destructive' : 'bg-success/15 text-success'
+                                      }`}>
+                                        {table.is_occupied ? 'Occupied' : 'Free'}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                                      <span className="flex items-center gap-1"><Users className="w-3 h-3" />{table.capacity} seats</span>
+                                      {table.is_occupied && tableOccupationTimes[table.id] && (
+                                        <TableOccupiedTimer occupiedSince={tableOccupationTimes[table.id]} />
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Arrow */}
+                                  <ArrowLeft className="w-4 h-4 text-muted-foreground rotate-180 shrink-0" />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
