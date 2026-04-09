@@ -24,7 +24,8 @@ const CMD = {
 };
 
 // Known USB Vendor IDs for thermal printers
-const PRINTER_FILTERS = [
+// Vendor-based filters for known thermal printers
+const PRINTER_VENDOR_FILTERS = [
   { vendorId: 0x04B8 },  // Epson (M325A, TM-T82)
   { vendorId: 0x0DD4 },  // TVS Electronics (RP3210)
   { vendorId: 0x0FE6 },  // POS Printer
@@ -35,6 +36,14 @@ const PRINTER_FILTERS = [
   { vendorId: 0x1A86 },  // QinHeng (CH340)
   { vendorId: 0x067B },  // Prolific (PL2303)
   { vendorId: 0x0403 },  // FTDI
+  { vendorId: 0x0525 },  // Netchip (Linux USB gadget)
+  { vendorId: 0x154F },  // SNBC
+  { vendorId: 0x0FE6 },  // Kontron
+  { vendorId: 0x0AA7 },  // Beiyang
+  { vendorId: 0x4B43 },  // Custom POS
+  { vendorId: 0x0FE6 },  // ICS
+  { vendorId: 0x2730 },  // Citizen
+  { vendorId: 0x0B00 },  // Hewlett Packard POS
 ];
 
 export interface USBPrinterDevice {
