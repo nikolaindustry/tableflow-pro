@@ -1901,6 +1901,40 @@ export default function OrderKiosk() {
               </div>
             </div>
 
+            {/* Customer Details (Optional) */}
+            <div className="border rounded-lg overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between p-3 text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
+                onClick={() => setShowCustomerDetails(!showCustomerDetails)}
+              >
+                <span className="flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  Add Customer Details (Optional)
+                </span>
+                {showCustomerDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {showCustomerDetails && (
+                <div className="p-3 pt-0 space-y-2">
+                  <Input
+                    placeholder="Customer Name"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Phone Number"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Customer GSTIN"
+                    value={customerGstin}
+                    onChange={(e) => setCustomerGstin(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+
             {/* Print Options */}
             <div className="flex gap-2">
               {/* USB Thermal Print - Primary */}
