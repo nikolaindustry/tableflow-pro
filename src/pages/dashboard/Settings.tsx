@@ -19,6 +19,8 @@ export default function Settings() {
     phone: '',
     address: '',
     gstin: '',
+    cgst_percentage: '',
+    sgst_percentage: '',
   });
 
   useEffect(() => {
@@ -28,6 +30,8 @@ export default function Settings() {
         phone: currentRestaurant.phone || '',
         address: currentRestaurant.address || '',
         gstin: currentRestaurant.gstin || '',
+        cgst_percentage: currentRestaurant.cgst_percentage?.toString() || '',
+        sgst_percentage: currentRestaurant.sgst_percentage?.toString() || '',
       });
     }
   }, [currentRestaurant]);
@@ -43,6 +47,8 @@ export default function Settings() {
         phone: form.phone,
         address: form.address,
         gstin: form.gstin,
+        cgst_percentage: form.cgst_percentage ? parseFloat(form.cgst_percentage) : 0,
+        sgst_percentage: form.sgst_percentage ? parseFloat(form.sgst_percentage) : 0,
       })
       .eq('id', currentRestaurant.id);
 
@@ -117,6 +123,35 @@ export default function Settings() {
                 onChange={(e) => setForm({ ...form, gstin: e.target.value })}
                 placeholder="Enter GSTIN number"
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="cgst">CGST (%)</Label>
+                <Input
+                  id="cgst"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={form.cgst_percentage}
+                  onChange={(e) => setForm({ ...form, cgst_percentage: e.target.value })}
+                  placeholder="e.g., 9"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sgst">SGST (%)</Label>
+                <Input
+                  id="sgst"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={form.sgst_percentage}
+                  onChange={(e) => setForm({ ...form, sgst_percentage: e.target.value })}
+                  placeholder="e.g., 9"
+                />
+              </div>
             </div>
 
             <Button onClick={handleSave} disabled={saving}>

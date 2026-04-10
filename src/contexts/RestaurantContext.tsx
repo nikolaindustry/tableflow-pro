@@ -13,6 +13,8 @@ interface Restaurant {
   address: string | null;
   phone: string | null;
   gstin: string | null;
+  cgst_percentage: number | null;
+  sgst_percentage: number | null;
   created_at: string;
 }
 
@@ -94,6 +96,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
             address,
             phone,
             gstin,
+            cgst_percentage,
+            sgst_percentage,
             created_at,
             owner_id
           )

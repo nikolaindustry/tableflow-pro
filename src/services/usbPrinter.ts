@@ -219,9 +219,23 @@ class USBPrinterService {
     }
 
     text('--------------------------------'); nl();
+    
+    // Add subtotal
+    add(CMD.ALIGN_RIGHT);
+    const subtotal = bill.subtotal || bill.total;
+    text(`Subtotal: Rs.${subtotal.toFixed(2)}`); nl();
+
+    // Add GST details if available
+    if (bill.cgstPercentage && bill.cgstAmount) {
+      text(`CGST (${bill.cgstPercentage}%): Rs.${bill.cgstAmount.toFixed(2)}`); nl();
+    }
+    if (bill.sgstPercentage && bill.sgstAmount) {
+      text(`SGST (${bill.sgstPercentage}%): Rs.${bill.sgstAmount.toFixed(2)}`); nl();
+    }
+
+    text('--------------------------------'); nl();
     add(CMD.BOLD_ON);
     add(CMD.DOUBLE_SIZE_ON);
-    add(CMD.ALIGN_RIGHT);
     text(`TOTAL: Rs.${bill.total.toFixed(2)}`); nl();
     add(CMD.DOUBLE_SIZE_OFF);
     add(CMD.BOLD_OFF);

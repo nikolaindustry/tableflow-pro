@@ -427,6 +427,8 @@ export type Database = {
           owner_id: string
           phone: string | null
           slug: string
+          cgst_percentage: number | null
+          sgst_percentage: number | null
           updated_at: string
         }
         Insert: {
@@ -438,6 +440,8 @@ export type Database = {
           owner_id: string
           phone?: string | null
           slug: string
+          cgst_percentage?: number | null
+          sgst_percentage?: number | null
           updated_at?: string
         }
         Update: {
@@ -449,6 +453,8 @@ export type Database = {
           owner_id?: string
           phone?: string | null
           slug?: string
+          cgst_percentage?: number | null
+          sgst_percentage?: number | null
           updated_at?: string
         }
         Relationships: []

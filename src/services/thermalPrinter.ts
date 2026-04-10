@@ -20,6 +20,11 @@ export interface BillData {
     quantity: number;
     price: number;
   }[];
+  subtotal?: number;
+  cgstPercentage?: number;
+  sgstPercentage?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
   total: number;
 }
 
@@ -166,10 +171,25 @@ class ThermalPrinterService {
         printer.text(`${itemName}${qty}${amount}\n`);
       }
 
+      printer
+        .text('--------------------------------\n')
+        .align('right');
+
+      // Add subtotal
+      const subtotal = bill.subtotal || bill.total;
+      printer.text(`Subtotal: ₹${subtotal.toFixed(2)}\n`);
+
+      // Add GST details if available
+      if (bill.cgstPercentage && bill.cgstAmount) {
+        printer.text(`CGST (${bill.cgstPercentage}%): ₹${bill.cgstAmount.toFixed(2)}\n`);
+      }
+      if (bill.sgstPercentage && bill.sgstAmount) {
+        printer.text(`SGST (${bill.sgstPercentage}%): ₹${bill.sgstAmount.toFixed(2)}\n`);
+      }
+
       await printer
         .text('--------------------------------\n')
         .bold()
-        .align('right')
         .text(`Grand Total: ₹${bill.total.toFixed(2)}\n`)
         .clearFormatting()
         .align('center')
@@ -257,6 +277,22 @@ class ThermalPrinterService {
           </table>
           <div class="divider"></div>
           <table>
+            <tr>
+              <td colspan="3">Subtotal</td>
+              <td style="text-align: right;">₹${(bill.subtotal || bill.total).toFixed(2)}</td>
+            </tr>
+            ${bill.cgstPercentage && bill.cgstAmount ? `
+            <tr>
+              <td colspan="3">CGST (${bill.cgstPercentage}%)</td>
+              <td style="text-align: right;">₹${bill.cgstAmount.toFixed(2)}</td>
+            </tr>
+            ` : ''}
+            ${bill.sgstPercentage && bill.sgstAmount ? `
+            <tr>
+              <td colspan="3">SGST (${bill.sgstPercentage}%)</td>
+              <td style="text-align: right;">₹${bill.sgstAmount.toFixed(2)}</td>
+            </tr>
+            ` : ''}
             <tr class="total-row">
               <td colspan="3"><strong>Grand Total</strong></td>
               <td style="text-align: right;"><strong>₹${bill.total.toFixed(2)}</strong></td>

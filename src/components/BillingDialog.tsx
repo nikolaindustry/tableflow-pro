@@ -51,6 +51,8 @@ interface BillingDialogProps {
   restaurantAddress?: string;
   restaurantPhone?: string;
   restaurantGstin?: string;
+  restaurantCgstPercentage?: number;
+  restaurantSgstPercentage?: number;
 }
 
 export function BillingDialog({
@@ -62,6 +64,8 @@ export function BillingDialog({
   restaurantAddress,
   restaurantPhone,
   restaurantGstin,
+  restaurantCgstPercentage = 0,
+  restaurantSgstPercentage = 0,
 }: BillingDialogProps) {
   const [processingPayment, setProcessingPayment] = useState(false);
   const [printerSelectorOpen, setPrinterSelectorOpen] = useState(false);
@@ -75,6 +79,11 @@ export function BillingDialog({
 
   const getBillData = (): BillData | null => {
     if (!order) return null;
+    
+    // Calculate GST amounts
+    const cgstAmount = (order.total_amount * restaurantCgstPercentage) / 100;
+    const sgstAmount = (order.total_amount * restaurantSgstPercentage) / 100;
+    const grandTotal = order.total_amount + cgstAmount + sgstAmount;
     
     return {
       restaurantName: restaurantName || '',
@@ -90,7 +99,12 @@ export function BillingDialog({
         quantity: item.quantity,
         price: item.unit_price,
       })),
-      total: order.total_amount,
+      subtotal: order.total_amount,
+      cgstPercentage: restaurantCgstPercentage,
+      sgstPercentage: restaurantSgstPercentage,
+      cgstAmount,
+      sgstAmount,
+      total: grandTotal,
     };
   };
 
@@ -176,9 +190,27 @@ export function BillingDialog({
                     <span>₹{(item.unit_price * item.quantity).toFixed(2)}</span>
                   </div>
                 ))}
-                <div className="border-t pt-2 mt-2 flex justify-between font-bold">
-                  <span>Total</span>
-                  <span>₹{order.total_amount.toFixed(2)}</span>
+                <div className="border-t pt-2 mt-2 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span>Subtotal</span>
+                    <span>₹{order.total_amount.toFixed(2)}</span>
+                  </div>
+                  {(restaurantCgstPercentage > 0 || restaurantSgstPercentage > 0) && (
+                    <>
+                      <div className="flex justify-between text-sm text-muted-foreground">
+                        <span>CGST ({restaurantCgstPercentage}%)</span>
+                        <span>₹{((order.total_amount * restaurantCgstPercentage) / 100).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm text-muted-foreground">
+                        <span>SGST ({restaurantSgstPercentage}%)</span>
+                        <span>₹{((order.total_amount * restaurantSgstPercentage) / 100).toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
+                  <div className="flex justify-between font-bold text-lg pt-2 border-t">
+                    <span>Grand Total</span>
+                    <span>₹{(order.total_amount + ((order.total_amount * restaurantCgstPercentage) / 100) + ((order.total_amount * restaurantSgstPercentage) / 100)).toFixed(2)}</span>
+                  </div>
                 </div>
               </div>
 

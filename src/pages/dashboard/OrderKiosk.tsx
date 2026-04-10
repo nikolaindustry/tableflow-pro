@@ -148,6 +148,7 @@ export default function OrderKiosk() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [submitting, setSubmitting] = useState(false);
   const [showBillDialog, setShowBillDialog] = useState(false);
+  const [billingOrder, setBillingOrder] = useState<any>(null);
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [cancelDialogItem, setCancelDialogItem] = useState<{ item: CartItem; orderId: string; itemId: string } | null>(null);
   const [cancellingItem, setCancellingItem] = useState(false);
@@ -749,35 +750,49 @@ export default function OrderKiosk() {
   }, [cart]);
 
   const handlePaymentComplete = async (paymentMethod: 'cash' | 'card' | 'upi') => {
-    if (!selectedTable || !activeOrder) return;
+    // Determine which table to use (from billingOrder or selectedTable)
+    const tableId = billingOrder?.table_id || selectedTable?.id;
+    
+    if (!tableId) {
+      toast.error('No table found');
+      return;
+    }
     
     // Mark all orders for this table as served
     await supabase
       .from('orders')
       .update({ status: 'served' })
-      .eq('table_id', selectedTable.id)
+      .eq('table_id', tableId)
       .in('status', ['pending', 'cooking', 'ready']);
 
     // Mark table as free
     await supabase
       .from('tables')
       .update({ is_occupied: false })
-      .eq('id', selectedTable.id);
+      .eq('id', tableId);
 
     // Update local floors state
     setFloors(floors.map(f => ({
       ...f,
       tables: f.tables.map(t => 
-        t.id === selectedTable.id ? { ...t, is_occupied: false } : t
+        t.id === tableId ? { ...t, is_occupied: false } : t
       )
     })));
 
     toast.success(`Payment received via ${paymentMethod.toUpperCase()}`);
-    handleCloseOrder();
+    
+    // Reset states
+    setBillingOrder(null);
+    setShowBillDialog(false);
+    
+    // If this was from the regular kiosk flow, close the order
+    if (selectedTable && activeOrder) {
+      handleCloseOrder();
+    }
   };
 
-  // Quick print receipt directly from table card (no dialog)
-  const quickPrintReceipt = async (table: Table, e: React.MouseEvent) => {
+  // Open billing dialog for occupied table from table list
+  const openTableBilling = async (table: Table, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!currentRestaurant) return;
     
@@ -785,44 +800,66 @@ export default function OrderKiosk() {
       // Fetch active orders for this table
       const { data, error } = await supabase
         .from('orders')
-        .select(`id, status, total_amount, created_at, order_items (id, menu_item_id, quantity, unit_price, status)`)
+        .select(`id, status, total_amount, created_at, order_items (id, menu_item_id, quantity, unit_price, status, menu_item:menu_items(name))`)
         .eq('table_id', table.id)
         .in('status', ['pending', 'cooking', 'ready'])
         .order('created_at', { ascending: true });
 
       if (error || !data || data.length === 0) {
-        toast.error('No active orders to print');
+        toast.error('No active orders to bill');
         return;
       }
 
-      const allItems: { name: string; quantity: number; price: number }[] = [];
+      // Combine all order items
+      const allItems: any[] = [];
       let totalAmount = 0;
       for (const order of data) {
         totalAmount += order.total_amount;
         for (const oi of order.order_items) {
-          const mi = menuItems.find(m => m.id === oi.menu_item_id);
-          allItems.push({ name: mi?.name || 'Item', quantity: oi.quantity, price: oi.unit_price });
+          allItems.push({
+            id: oi.id,
+            menu_item_id: oi.menu_item_id || '',
+            quantity: oi.quantity,
+            unit_price: oi.unit_price,
+            status: oi.status,
+            menu_item: oi.menu_item ? { name: oi.menu_item.name } : undefined,
+          });
         }
       }
 
-      const billData: BillData = {
-        restaurantName: currentRestaurant.name,
-        restaurantAddress: currentRestaurant.address,
-        restaurantPhone: currentRestaurant.phone,
-        restaurantGstin: currentRestaurant.gstin,
-        tableNumber: table.table_number,
-        items: allItems,
-        total: totalAmount,
+      // Create a combined order for billing
+      const combinedOrder = {
+        id: data[0].id,
+        status: data[0].status,
+        total_amount: totalAmount,
+        created_at: data[0].created_at,
+        items: allItems
       };
 
-      if (usbPrinter) {
-        await printUSB(billData);
-        toast.success(`Receipt printed for Table ${table.table_number}`);
-      } else {
-        await printThermal(billData, false);
-      }
+      // Create billing order with correct structure for BillingDialog
+      const billingOrderData = {
+        id: data[0].id,
+        table_id: table.id,
+        total_amount: totalAmount,
+        table: { 
+          table_number: table.table_number, 
+          floor: { 
+            name: floors.find(f => f.tables.some(t => t.id === table.id))?.name || '' 
+          } 
+        },
+        order_items: allItems.map(item => ({
+          id: item.id,
+          menu_item: item.menu_item,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+        }))
+      };
+
+      // Only set billing order and open dialog (don't set selectedTable/activeOrder to avoid navigation)
+      setBillingOrder(billingOrderData);
+      setShowBillDialog(true);
     } catch (err: any) {
-      toast.error(err.message || 'Print failed');
+      toast.error(err.message || 'Failed to open billing');
     }
   };
 
@@ -1034,20 +1071,20 @@ export default function OrderKiosk() {
                                   </div>
                                   {table.is_occupied && (
                                     <div className="flex items-center justify-center gap-2 mt-1">
-                                      <button
-                                        onClick={(e) => quickPrintReceipt(table, e)}
-                                        className="p-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
-                                        title="Print Receipt"
+                                      <div
+                                        onClick={(e) => openTableBilling(table, e)}
+                                        className="p-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors cursor-pointer"
+                                        title="Generate Bill"
                                       >
                                         <Printer className="w-4 h-4" />
-                                      </button>
-                                      <button
+                                      </div>
+                                      <div
                                         onClick={(e) => quickMarkAvailable(table, e)}
-                                        className="p-1.5 rounded-lg bg-success/10 hover:bg-success/20 text-success transition-colors"
+                                        className="p-1.5 rounded-lg bg-success/10 hover:bg-success/20 text-success transition-colors cursor-pointer"
                                         title="Mark Available"
                                       >
                                         <Check className="w-4 h-4" />
-                                      </button>
+                                      </div>
                                     </div>
                                   )}
                                 </button>
@@ -1119,20 +1156,20 @@ export default function OrderKiosk() {
                                   </div>
                                   {table.is_occupied && (
                                     <div className="flex items-center justify-center gap-2 mt-1">
-                                      <button
-                                        onClick={(e) => quickPrintReceipt(table, e)}
-                                        className="p-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
-                                        title="Print Receipt"
+                                      <div
+                                        onClick={(e) => openTableBilling(table, e)}
+                                        className="p-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors cursor-pointer"
+                                        title="Generate Bill"
                                       >
                                         <Printer className="w-4 h-4" />
-                                      </button>
-                                      <button
+                                      </div>
+                                      <div
                                         onClick={(e) => quickMarkAvailable(table, e)}
-                                        className="p-1.5 rounded-lg bg-success/10 hover:bg-success/20 text-success transition-colors"
+                                        className="p-1.5 rounded-lg bg-success/10 hover:bg-success/20 text-success transition-colors cursor-pointer"
                                         title="Mark Available"
                                       >
                                         <Check className="w-4 h-4" />
-                                      </button>
+                                      </div>
                                     </div>
                                   )}
                                 </button>
@@ -1806,8 +1843,13 @@ export default function OrderKiosk() {
       {/* Billing Dialog */}
       <BillingDialog
         open={showBillDialog}
-        onOpenChange={setShowBillDialog}
-        order={activeOrder ? {
+        onOpenChange={(open) => {
+          setShowBillDialog(open);
+          if (!open) {
+            setBillingOrder(null);
+          }
+        }}
+        order={billingOrder || (activeOrder && selectedTable ? {
           id: activeOrder.id,
           table_id: selectedTable?.id || null,
           total_amount: grandTotal,
@@ -1817,13 +1859,20 @@ export default function OrderKiosk() {
               name: floors.find(f => f.tables.some(t => t.id === selectedTable.id))?.name || '' 
             } 
           } : undefined,
-          order_items: activeOrder.items
-        } : null}
+          order_items: activeOrder.items.map(item => ({
+            id: item.id,
+            menu_item: item.menu_item ? { name: item.menu_item.name } : undefined,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+          }))
+        } : null)}
         onPaymentComplete={handlePaymentComplete}
         restaurantName={currentRestaurant?.name}
         restaurantAddress={currentRestaurant?.address}
         restaurantPhone={currentRestaurant?.phone}
         restaurantGstin={currentRestaurant?.gstin}
+        restaurantCgstPercentage={currentRestaurant?.cgst_percentage || 0}
+        restaurantSgstPercentage={currentRestaurant?.sgst_percentage || 0}
       />
 
       {/* Cancel Cooking Item Confirmation Dialog */}

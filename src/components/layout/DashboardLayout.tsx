@@ -50,17 +50,17 @@ interface NavItem {
 
 const getNavItems = (slug: string): NavItem[] => [
   { href: `/dashboard/${slug}`, label: 'Dashboard', icon: LayoutDashboard },
+  { href: `/dashboard/${slug}/order-kiosk`, label: 'Order Kiosk', icon: Monitor, roles: ['owner', 'manager', 'waiter'] },
   { href: `/dashboard/${slug}/kitchens`, label: 'Kitchens', icon: ChefHat, roles: ['owner', 'manager'] },
   { href: `/dashboard/${slug}/floors`, label: 'Floors & Tables', icon: Layers, roles: ['owner', 'manager'] },
   { href: `/dashboard/${slug}/menu`, label: 'Menu', icon: BookOpen, roles: ['owner', 'manager'] },
   { href: `/dashboard/${slug}/orders`, label: 'Orders', icon: ShoppingBag },
-  { href: `/dashboard/${slug}/kitchen-view`, label: 'Kitchen View', icon: ChefHat, roles: ['owner', 'manager', 'chef'] },
-  { href: `/dashboard/${slug}/order-kiosk`, label: 'Order Kiosk', icon: Monitor, roles: ['owner', 'manager', 'waiter'] },
   { href: `/dashboard/${slug}/reports`, label: 'Reports', icon: BarChart3, roles: ['owner', 'manager'] },
   { href: `/dashboard/${slug}/expenses`, label: 'Expenses', icon: Wallet, roles: ['owner', 'manager'] },
   { href: `/dashboard/${slug}/staff`, label: 'Staff', icon: Users, roles: ['owner', 'manager'] },
   { href: `/dashboard/${slug}/data`, label: 'Data Manager', icon: DatabaseIcon, roles: ['owner'] },
   { href: `/dashboard/${slug}/settings`, label: 'Settings', icon: SettingsIcon, roles: ['owner'] },
+  { href: `/dashboard/${slug}/kitchen-view`, label: 'Kitchen View', icon: ChefHat, roles: ['owner', 'manager', 'chef'] },
 ];
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {

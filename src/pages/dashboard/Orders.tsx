@@ -943,6 +943,8 @@ export default function Orders() {
         restaurantAddress={currentRestaurant?.address}
         restaurantPhone={currentRestaurant?.phone}
         restaurantGstin={currentRestaurant?.gstin}
+        restaurantCgstPercentage={currentRestaurant?.cgst_percentage || 0}
+        restaurantSgstPercentage={currentRestaurant?.sgst_percentage || 0}
       />
 
       {/* Cancel Order Confirmation Dialog */}
