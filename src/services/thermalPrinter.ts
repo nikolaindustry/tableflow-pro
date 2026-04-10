@@ -146,7 +146,13 @@ class ThermalPrinterService {
         .text('--------------------------------\n')
         .align('left')
         .text(`Table: ${bill.tableNumber || 'Takeaway'}\n`)
-        .text(`Date: ${billDate}\n`)
+        .text(`Date: ${billDate}\n`);
+
+      if (bill.customerName) { printer.text(`Customer: ${bill.customerName}\n`); }
+      if (bill.customerPhone) { printer.text(`Phone: ${bill.customerPhone}\n`); }
+      if (bill.customerGstin) { printer.text(`GSTIN: ${bill.customerGstin}\n`); }
+
+      printer
         .text('--------------------------------\n')
         .bold()
         .text('Item              Qty    Amount\n')
@@ -232,6 +238,9 @@ class ThermalPrinterService {
           <div class="divider"></div>
           <p><strong>Table:</strong> ${bill.tableNumber || 'Takeaway'}</p>
           <p><strong>Date:</strong> ${billDate}</p>
+          ${bill.customerName ? `<p><strong>Customer:</strong> ${bill.customerName}</p>` : ''}
+          ${bill.customerPhone ? `<p><strong>Phone:</strong> ${bill.customerPhone}</p>` : ''}
+          ${bill.customerGstin ? `<p><strong>GSTIN:</strong> ${bill.customerGstin}</p>` : ''}
           <div class="divider"></div>
           <table>
             <thead>
