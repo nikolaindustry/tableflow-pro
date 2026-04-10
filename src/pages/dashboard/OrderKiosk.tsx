@@ -37,6 +37,9 @@ import {
   LayoutGrid,
   List,
   Check,
+  User,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { useUSBPrinter } from '@/hooks/useUSBPrinter';
@@ -147,6 +150,10 @@ export default function OrderKiosk() {
   const [submitting, setSubmitting] = useState(false);
   const [showBillDialog, setShowBillDialog] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [showCustomerDetails, setShowCustomerDetails] = useState(false);
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerGstin, setCustomerGstin] = useState('');
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [cancelDialogItem, setCancelDialogItem] = useState<{ item: CartItem; orderId: string; itemId: string } | null>(null);
   const [cancellingItem, setCancellingItem] = useState(false);
@@ -793,6 +800,9 @@ export default function OrderKiosk() {
       restaurantPhone: currentRestaurant.phone,
       restaurantGstin: currentRestaurant.gstin,
       tableNumber: selectedTable.table_number,
+      customerName: customerName.trim() || undefined,
+      customerPhone: customerPhone.trim() || undefined,
+      customerGstin: customerGstin.trim() || undefined,
       items: activeOrder.items.map(item => ({
         name: item.menu_item?.name || 'Item',
         quantity: item.quantity,
@@ -800,7 +810,7 @@ export default function OrderKiosk() {
       })),
       total: activeOrder.total_amount,
     };
-  }, [selectedTable, activeOrder, currentRestaurant]);
+  }, [selectedTable, activeOrder, currentRestaurant, customerName, customerPhone, customerGstin]);
 
   const handlePrintBill = async (method: 'usb' | 'bluetooth' | 'browser' = 'usb') => {
     const billData = getBillData();
