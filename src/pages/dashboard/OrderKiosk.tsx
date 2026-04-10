@@ -36,6 +36,7 @@ import {
   Bluetooth,
   LayoutGrid,
   List,
+  Check,
 } from 'lucide-react';
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { useUSBPrinter } from '@/hooks/useUSBPrinter';
@@ -829,6 +830,83 @@ export default function OrderKiosk() {
     }
   };
 
+  // Quick print receipt directly from table card (no dialog)
+  const quickPrintReceipt = async (table: Table, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!currentRestaurant) return;
+    
+    try {
+      // Fetch active orders for this table
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`id, status, total_amount, created_at, order_items (id, menu_item_id, quantity, unit_price, status)`)
+        .eq('table_id', table.id)
+        .in('status', ['pending', 'cooking', 'ready'])
+        .order('created_at', { ascending: true });
+
+      if (error || !data || data.length === 0) {
+        toast.error('No active orders to print');
+        return;
+      }
+
+      const allItems: { name: string; quantity: number; price: number }[] = [];
+      let totalAmount = 0;
+      for (const order of data) {
+        totalAmount += order.total_amount;
+        for (const oi of order.order_items) {
+          const mi = menuItems.find(m => m.id === oi.menu_item_id);
+          allItems.push({ name: mi?.name || 'Item', quantity: oi.quantity, price: oi.unit_price });
+        }
+      }
+
+      const billData: BillData = {
+        restaurantName: currentRestaurant.name,
+        restaurantAddress: currentRestaurant.address,
+        restaurantPhone: currentRestaurant.phone,
+        restaurantGstin: currentRestaurant.gstin,
+        tableNumber: table.table_number,
+        items: allItems,
+        total: totalAmount,
+      };
+
+      if (usbPrinter) {
+        await printUSB(billData);
+        toast.success(`Receipt printed for Table ${table.table_number}`);
+      } else {
+        await printThermal(billData, false);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Print failed');
+    }
+  };
+
+  // Quick mark table as available from table card
+  const quickMarkAvailable = async (table: Table, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      // Mark all active orders as served
+      await supabase
+        .from('orders')
+        .update({ status: 'served' })
+        .eq('table_id', table.id)
+        .in('status', ['pending', 'cooking', 'ready']);
+
+      // Mark table as free
+      await supabase
+        .from('tables')
+        .update({ is_occupied: false })
+        .eq('id', table.id);
+
+      setFloors(prev => prev.map(f => ({
+        ...f,
+        tables: f.tables.map(t => t.id === table.id ? { ...t, is_occupied: false } : t)
+      })));
+      toast.success(`Table ${table.table_number} is now available`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update table');
+    }
+  };
+
   if (!currentRestaurant) {
     return (
       <DashboardLayout>
@@ -1008,6 +1086,24 @@ export default function OrderKiosk() {
                                       <span className="text-xs font-semibold px-3 py-1 rounded-full bg-success/15 text-success">Available</span>
                                     )}
                                   </div>
+                                  {table.is_occupied && (
+                                    <div className="flex items-center justify-center gap-2 mt-1">
+                                      <button
+                                        onClick={(e) => quickPrintReceipt(table, e)}
+                                        className="p-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+                                        title="Print Receipt"
+                                      >
+                                        <Printer className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={(e) => quickMarkAvailable(table, e)}
+                                        className="p-1.5 rounded-lg bg-success/10 hover:bg-success/20 text-success transition-colors"
+                                        title="Mark Available"
+                                      >
+                                        <Check className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  )}
                                 </button>
                               ))}
                             </div>
@@ -1075,6 +1171,24 @@ export default function OrderKiosk() {
                                       <span className="text-xs font-semibold px-3 py-1 rounded-full bg-success/15 text-success">Available</span>
                                     )}
                                   </div>
+                                  {table.is_occupied && (
+                                    <div className="flex items-center justify-center gap-2 mt-1">
+                                      <button
+                                        onClick={(e) => quickPrintReceipt(table, e)}
+                                        className="p-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+                                        title="Print Receipt"
+                                      >
+                                        <Printer className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={(e) => quickMarkAvailable(table, e)}
+                                        className="p-1.5 rounded-lg bg-success/10 hover:bg-success/20 text-success transition-colors"
+                                        title="Mark Available"
+                                      >
+                                        <Check className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  )}
                                 </button>
                               ))}
                             </div>
