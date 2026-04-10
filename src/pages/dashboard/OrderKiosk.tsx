@@ -1868,7 +1868,15 @@ export default function OrderKiosk() {
       </div>
 
       {/* Billing Dialog */}
-      <Dialog open={showBillDialog} onOpenChange={setShowBillDialog}>
+      <Dialog open={showBillDialog} onOpenChange={(open) => {
+        setShowBillDialog(open);
+        if (!open) {
+          setShowCustomerDetails(false);
+          setCustomerName('');
+          setCustomerPhone('');
+          setCustomerGstin('');
+        }
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
