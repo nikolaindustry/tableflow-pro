@@ -58,18 +58,10 @@ import {
   Flame,
   Bell,
   Receipt,
-  CreditCard,
-  Banknote,
-  Smartphone,
-  Printer,
-  Bluetooth,
-  Settings,
 } from 'lucide-react';
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { useUSBPrinter } from '@/hooks/useUSBPrinter';
-import { PrinterSelector } from '@/components/PrinterSelector';
-import { Usb } from 'lucide-react';
-import type { BillData } from '@/services/thermalPrinter';
+import { BillingDialog } from '@/components/BillingDialog';
 import type { Database } from '@/integrations/supabase/types';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 
@@ -157,7 +149,6 @@ export default function Orders() {
   // Billing state
   const [billingDialogOpen, setBillingDialogOpen] = useState(false);
   const [billingOrder, setBillingOrder] = useState<Order | null>(null);
-  const [processingPayment, setProcessingPayment] = useState(false);
   const [printerSelectorOpen, setPrinterSelectorOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
@@ -173,9 +164,6 @@ export default function Orders() {
     setCancelDialogOpen(false);
     setOrderToCancel(null);
   };
-  
-  const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing } = useThermalPrinter();
-  const { connectedPrinter: usbPrinter, printing: usbPrinting, isAvailable: isUSBAvailable, connectPrinter: connectUSB, disconnectPrinter: disconnectUSB, printBill: printUSB } = useUSBPrinter();
 
   const fetchData = useCallback(async () => {
     if (!currentRestaurant) return;
@@ -378,77 +366,24 @@ export default function Orders() {
     setBillingDialogOpen(true);
   };
 
-  const processPayment = async (paymentMethod: 'cash' | 'card' | 'upi') => {
+  const handlePaymentComplete = async (paymentMethod: 'cash' | 'card' | 'upi') => {
     if (!billingOrder) return;
     
-    setProcessingPayment(true);
-    try {
-      // Mark order as served and record payment method
-      await supabase
-        .from('orders')
-        .update({ status: 'served', payment_method: paymentMethod })
-        .eq('id', billingOrder.id);
+    // Mark order as served and record payment method
+    await supabase
+      .from('orders')
+      .update({ status: 'served', payment_method: paymentMethod })
+      .eq('id', billingOrder.id);
 
-      // Free up the table
-      if (billingOrder.table_id) {
-        await supabase.from('tables').update({ is_occupied: false }).eq('id', billingOrder.table_id);
-      }
-
-      setBillingDialogOpen(false);
-      setBillingOrder(null);
-      toast.success(`Payment received via ${paymentMethod.toUpperCase()}`);
-      fetchData();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to process payment');
-    } finally {
-      setProcessingPayment(false);
+    // Free up the table
+    if (billingOrder.table_id) {
+      await supabase.from('tables').update({ is_occupied: false }).eq('id', billingOrder.table_id);
     }
-  };
 
-  const getBillData = useCallback((): BillData | null => {
-    if (!billingOrder || !currentRestaurant) return null;
-    
-    return {
-      restaurantName: currentRestaurant.name,
-      restaurantAddress: currentRestaurant.address,
-      restaurantPhone: currentRestaurant.phone,
-      restaurantGstin: currentRestaurant.gstin,
-      tableNumber: billingOrder.table?.table_number,
-      items: billingOrder.order_items.map(item => ({
-        name: item.menu_item?.name || 'Item',
-        quantity: item.quantity,
-        price: item.unit_price,
-      })),
-      total: billingOrder.total_amount,
-    };
-  }, [billingOrder, currentRestaurant]);
-
-  const handlePrintBill = async (method: 'usb' | 'bluetooth' | 'browser' = 'usb') => {
-    const billData = getBillData();
-    if (!billData) return;
-    
-    try {
-      if (method === 'usb' && usbPrinter) {
-        await printUSB(billData);
-        toast.success('Receipt printed');
-      } else if (method === 'bluetooth' && connectedDevice) {
-        await printThermal(billData, true);
-        toast.success('Receipt printed via Bluetooth');
-      } else {
-        await printThermal(billData, false);
-      }
-    } catch (error: any) {
-      toast.error(error.message);
-    }
-  };
-
-  const handleConnectUSB = async () => {
-    try {
-      await connectUSB();
-      toast.success('USB printer connected!');
-    } catch (error: any) {
-      toast.error(error.message);
-    }
+    setBillingDialogOpen(false);
+    setBillingOrder(null);
+    toast.success(`Payment received via ${paymentMethod.toUpperCase()}`);
+    fetchData();
   };
 
   const filteredMenuItems = menuItems.filter(
@@ -999,111 +934,16 @@ export default function Orders() {
       </div>
 
       {/* Billing Dialog */}
-      <Dialog open={billingDialogOpen} onOpenChange={setBillingDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Receipt className="w-5 h-5" />
-              Bill & Payment
-            </DialogTitle>
-            <DialogDescription>
-              {billingOrder?.table 
-                ? `${billingOrder.table.table_number} - ${billingOrder.table.floor.name}`
-                : 'Takeaway Order'}
-            </DialogDescription>
-          </DialogHeader>
-          
-          {billingOrder && (
-            <div className="space-y-4">
-              {/* Order Summary */}
-              <div className="border rounded-lg p-4 space-y-2">
-                {billingOrder.order_items.map((item) => (
-                  <div key={item.id} className="flex justify-between text-sm">
-                    <span>
-                      {item.menu_item?.name || 'Item'} ×{item.quantity}
-                    </span>
-                    <span>₹{(item.unit_price * item.quantity).toFixed(2)}</span>
-                  </div>
-                ))}
-                <div className="border-t pt-2 mt-2 flex justify-between font-bold">
-                  <span>Total</span>
-                  <span>₹{billingOrder.total_amount.toFixed(2)}</span>
-                </div>
-              </div>
-
-              {/* Print Options */}
-              <div className="flex gap-2">
-                {/* USB Thermal Print - Primary */}
-                {isUSBAvailable && (
-                  <Button 
-                    variant={usbPrinter ? 'default' : 'outline'}
-                    className={`flex-1 ${usbPrinter ? 'bg-primary' : ''}`}
-                    onClick={() => usbPrinter ? handlePrintBill('usb') : handleConnectUSB()}
-                    disabled={usbPrinting}
-                  >
-                    <Usb className="w-4 h-4 mr-2" />
-                    {usbPrinter ? `Print (${usbPrinter.name.substring(0, 12)})` : 'Connect USB Printer'}
-                  </Button>
-                )}
-                {/* Browser Print - Fallback */}
-                <Button variant="outline" className={isUSBAvailable ? '' : 'flex-1'} onClick={() => handlePrintBill('browser')} disabled={printing}>
-                  <Printer className="w-4 h-4 mr-2" />
-                  Browser
-                </Button>
-                {/* Bluetooth - Mobile only */}
-                {isBluetoothAvailable && (
-                  <Button 
-                    variant="outline" 
-                    className={connectedDevice ? 'border-success text-success' : ''}
-                    onClick={() => connectedDevice ? handlePrintBill('bluetooth') : setPrinterSelectorOpen(true)}
-                    disabled={printing}
-                  >
-                    <Bluetooth className="w-4 h-4 mr-2" />
-                    BT
-                  </Button>
-                )}
-              </div>
-
-              {/* Payment Methods */}
-              <div className="space-y-2">
-                <Label>Select Payment Method</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  <Button
-                    variant="outline"
-                    className="flex flex-col items-center gap-1 h-auto py-4"
-                    onClick={() => processPayment('cash')}
-                    disabled={processingPayment}
-                  >
-                    <Banknote className="w-6 h-6" />
-                    <span className="text-xs">Cash</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex flex-col items-center gap-1 h-auto py-4"
-                    onClick={() => processPayment('card')}
-                    disabled={processingPayment}
-                  >
-                    <CreditCard className="w-6 h-6" />
-                    <span className="text-xs">Card</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex flex-col items-center gap-1 h-auto py-4"
-                    onClick={() => processPayment('upi')}
-                    disabled={processingPayment}
-                  >
-                    <Smartphone className="w-6 h-6" />
-                    <span className="text-xs">UPI</span>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Printer Selector Dialog */}
-      <PrinterSelector open={printerSelectorOpen} onOpenChange={setPrinterSelectorOpen} />
+      <BillingDialog
+        open={billingDialogOpen}
+        onOpenChange={setBillingDialogOpen}
+        order={billingOrder}
+        onPaymentComplete={handlePaymentComplete}
+        restaurantName={currentRestaurant?.name}
+        restaurantAddress={currentRestaurant?.address}
+        restaurantPhone={currentRestaurant?.phone}
+        restaurantGstin={currentRestaurant?.gstin}
+      />
 
       {/* Cancel Order Confirmation Dialog */}
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>

@@ -44,8 +44,7 @@ import {
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { useUSBPrinter } from '@/hooks/useUSBPrinter';
 import { TableOccupiedTimer } from '@/components/TableOccupiedTimer';
-import { PrinterSelector } from '@/components/PrinterSelector';
-import { Usb } from 'lucide-react';
+import { BillingDialog } from '@/components/BillingDialog';
 import type { BillData } from '@/services/thermalPrinter';
 
 interface Table {
@@ -149,15 +148,9 @@ export default function OrderKiosk() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [submitting, setSubmitting] = useState(false);
   const [showBillDialog, setShowBillDialog] = useState(false);
-  const [processingPayment, setProcessingPayment] = useState(false);
-  const [showCustomerDetails, setShowCustomerDetails] = useState(false);
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [customerGstin, setCustomerGstin] = useState('');
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [cancelDialogItem, setCancelDialogItem] = useState<{ item: CartItem; orderId: string; itemId: string } | null>(null);
   const [cancellingItem, setCancellingItem] = useState(false);
-  const [printerSelectorOpen, setPrinterSelectorOpen] = useState(false);
   const [tableOccupationTimes, setTableOccupationTimes] = useState<Record<string, string>>({});
   const [tableViewMode, setTableViewMode] = useState<'grid' | 'list'>('list');
   const [tableSearchQuery, setTableSearchQuery] = useState('');
@@ -755,89 +748,32 @@ export default function OrderKiosk() {
       .reduce((sum, item) => sum + (item.menuItem.price * item.quantity), 0);
   }, [cart]);
 
-  const processPayment = async (paymentMethod: 'cash' | 'card' | 'upi') => {
+  const handlePaymentComplete = async (paymentMethod: 'cash' | 'card' | 'upi') => {
     if (!selectedTable || !activeOrder) return;
     
-    setProcessingPayment(true);
-    try {
-      // Mark all orders for this table as served
-      await supabase
-        .from('orders')
-        .update({ status: 'served' })
-        .eq('table_id', selectedTable.id)
-        .in('status', ['pending', 'cooking', 'ready']);
+    // Mark all orders for this table as served
+    await supabase
+      .from('orders')
+      .update({ status: 'served' })
+      .eq('table_id', selectedTable.id)
+      .in('status', ['pending', 'cooking', 'ready']);
 
-      // Mark table as free
-      await supabase
-        .from('tables')
-        .update({ is_occupied: false })
-        .eq('id', selectedTable.id);
+    // Mark table as free
+    await supabase
+      .from('tables')
+      .update({ is_occupied: false })
+      .eq('id', selectedTable.id);
 
-      // Update local floors state
-      setFloors(floors.map(f => ({
-        ...f,
-        tables: f.tables.map(t => 
-          t.id === selectedTable.id ? { ...t, is_occupied: false } : t
-        )
-      })));
+    // Update local floors state
+    setFloors(floors.map(f => ({
+      ...f,
+      tables: f.tables.map(t => 
+        t.id === selectedTable.id ? { ...t, is_occupied: false } : t
+      )
+    })));
 
-      setShowBillDialog(false);
-      toast.success(`Payment received via ${paymentMethod.toUpperCase()}`);
-      handleCloseOrder();
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to process payment');
-    } finally {
-      setProcessingPayment(false);
-    }
-  };
-
-  const getBillData = useCallback((): BillData | null => {
-    if (!selectedTable || !activeOrder || !currentRestaurant) return null;
-    
-    return {
-      restaurantName: currentRestaurant.name,
-      restaurantAddress: currentRestaurant.address,
-      restaurantPhone: currentRestaurant.phone,
-      restaurantGstin: currentRestaurant.gstin,
-      tableNumber: selectedTable.table_number,
-      customerName: customerName.trim() || undefined,
-      customerPhone: customerPhone.trim() || undefined,
-      customerGstin: customerGstin.trim() || undefined,
-      items: activeOrder.items.map(item => ({
-        name: item.menu_item?.name || 'Item',
-        quantity: item.quantity,
-        price: item.unit_price,
-      })),
-      total: activeOrder.total_amount,
-    };
-  }, [selectedTable, activeOrder, currentRestaurant, customerName, customerPhone, customerGstin]);
-
-  const handlePrintBill = async (method: 'usb' | 'bluetooth' | 'browser' = 'usb') => {
-    const billData = getBillData();
-    if (!billData) return;
-    
-    try {
-      if (method === 'usb' && usbPrinter) {
-        await printUSB(billData);
-        toast.success('Receipt printed');
-      } else if (method === 'bluetooth' && connectedDevice) {
-        await printThermal(billData, true);
-        toast.success('Receipt printed via Bluetooth');
-      } else {
-        await printThermal(billData, false);
-      }
-    } catch (error: any) {
-      toast.error(error.message);
-    }
-  };
-
-  const handleConnectUSB = async () => {
-    try {
-      await connectUSB();
-      toast.success('USB printer connected!');
-    } catch (error: any) {
-      toast.error(error.message);
-    }
+    toast.success(`Payment received via ${paymentMethod.toUpperCase()}`);
+    handleCloseOrder();
   };
 
   // Quick print receipt directly from table card (no dialog)
@@ -1868,148 +1804,27 @@ export default function OrderKiosk() {
       </div>
 
       {/* Billing Dialog */}
-      <Dialog open={showBillDialog} onOpenChange={(open) => {
-        setShowBillDialog(open);
-        if (!open) {
-          setShowCustomerDetails(false);
-          setCustomerName('');
-          setCustomerPhone('');
-          setCustomerGstin('');
-        }
-      }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Receipt className="w-5 h-5" />
-              Bill for Table {selectedTable?.table_number}
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            {/* Bill Summary */}
-            <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-              {activeOrder?.items.map((item) => (
-                <div key={item.id} className="flex justify-between text-sm">
-                  <span>{item.menu_item?.name || 'Item'} x{item.quantity}</span>
-                  <span>₹{(item.unit_price * item.quantity).toFixed(2)}</span>
-                </div>
-              ))}
-              <Separator className="my-2" />
-              <div className="flex justify-between font-bold text-lg">
-                <span>Grand Total</span>
-                <span>₹{grandTotal.toFixed(2)}</span>
-              </div>
-            </div>
-
-            {/* Customer Details (Optional) */}
-            <div className="border rounded-lg overflow-hidden">
-              <button
-                type="button"
-                className="w-full flex items-center justify-between p-3 text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
-                onClick={() => setShowCustomerDetails(!showCustomerDetails)}
-              >
-                <span className="flex items-center gap-2">
-                  <User className="w-4 h-4" />
-                  Add Customer Details (Optional)
-                </span>
-                {showCustomerDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-              {showCustomerDetails && (
-                <div className="p-3 pt-0 space-y-2">
-                  <Input
-                    placeholder="Customer Name"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                  />
-                  <Input
-                    placeholder="Phone Number"
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                  />
-                  <Input
-                    placeholder="Customer GSTIN"
-                    value={customerGstin}
-                    onChange={(e) => setCustomerGstin(e.target.value)}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Print Options */}
-            <div className="flex gap-2">
-              {/* USB Thermal Print - Primary */}
-              {isUSBAvailable && (
-                <Button 
-                  variant={usbPrinter ? 'default' : 'outline'}
-                  className={`flex-1 ${usbPrinter ? 'bg-primary' : ''}`}
-                  onClick={() => usbPrinter ? handlePrintBill('usb') : handleConnectUSB()}
-                  disabled={usbPrinting}
-                >
-                  <Usb className="w-4 h-4 mr-2" />
-                  {usbPrinter ? `Print (${usbPrinter.name.substring(0, 12)})` : 'Connect USB Printer'}
-                </Button>
-              )}
-              {/* Browser Print - Fallback */}
-              <Button variant="outline" className={isUSBAvailable ? '' : 'flex-1'} onClick={() => handlePrintBill('browser')} disabled={printing}>
-                <Printer className="w-4 h-4 mr-2" />
-                Browser
-              </Button>
-              {/* Bluetooth - Mobile only */}
-              {isBluetoothAvailable && (
-                <Button 
-                  variant="outline" 
-                  className={connectedDevice ? 'border-success text-success' : ''}
-                  onClick={() => connectedDevice ? handlePrintBill('bluetooth') : setPrinterSelectorOpen(true)}
-                  disabled={printing}
-                >
-                  <Bluetooth className="w-4 h-4 mr-2" />
-                  {connectedDevice ? 'BT' : 'BT'}
-                </Button>
-              )}
-            </div>
-
-            {/* Payment Methods */}
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">Select Payment Method</p>
-              <div className="grid grid-cols-3 gap-2">
-                <Button
-                  variant="outline"
-                  className="h-20 flex-col gap-2"
-                  onClick={() => processPayment('cash')}
-                  disabled={processingPayment}
-                >
-                  <Banknote className="w-6 h-6" />
-                  <span>Cash</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-20 flex-col gap-2"
-                  onClick={() => processPayment('card')}
-                  disabled={processingPayment}
-                >
-                  <CreditCard className="w-6 h-6" />
-                  <span>Card</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-20 flex-col gap-2"
-                  onClick={() => processPayment('upi')}
-                  disabled={processingPayment}
-                >
-                  <Wallet className="w-6 h-6" />
-                  <span>UPI</span>
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setShowBillDialog(false)}>
-              Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <BillingDialog
+        open={showBillDialog}
+        onOpenChange={setShowBillDialog}
+        order={activeOrder ? {
+          id: activeOrder.id,
+          table_id: selectedTable?.id || null,
+          total_amount: grandTotal,
+          table: selectedTable ? { 
+            table_number: selectedTable.table_number, 
+            floor: { 
+              name: floors.find(f => f.tables.some(t => t.id === selectedTable.id))?.name || '' 
+            } 
+          } : undefined,
+          order_items: activeOrder.items
+        } : null}
+        onPaymentComplete={handlePaymentComplete}
+        restaurantName={currentRestaurant?.name}
+        restaurantAddress={currentRestaurant?.address}
+        restaurantPhone={currentRestaurant?.phone}
+        restaurantGstin={currentRestaurant?.gstin}
+      />
 
       {/* Cancel Cooking Item Confirmation Dialog */}
       <AlertDialog open={!!cancelDialogItem} onOpenChange={(open) => !open && setCancelDialogItem(null)}>
@@ -2047,9 +1862,6 @@ export default function OrderKiosk() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Printer Selector Dialog */}
-      <PrinterSelector open={printerSelectorOpen} onOpenChange={setPrinterSelectorOpen} />
     </div>
     </DashboardLayout>
   );
