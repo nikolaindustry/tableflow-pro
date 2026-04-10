@@ -36,6 +36,7 @@ import {
   Bluetooth,
   LayoutGrid,
   List,
+  Check,
 } from 'lucide-react';
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { useUSBPrinter } from '@/hooks/useUSBPrinter';
