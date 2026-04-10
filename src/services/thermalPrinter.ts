@@ -12,6 +12,9 @@ export interface BillData {
   restaurantPhone?: string | null;
   restaurantGstin?: string | null;
   tableNumber?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerGstin?: string;
   items: {
     name: string;
     quantity: number;

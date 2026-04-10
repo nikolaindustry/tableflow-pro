@@ -198,6 +198,12 @@ class USBPrinterService {
     const billDate = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
     text(`Table: ${bill.tableNumber || 'Takeaway'}`); nl();
     text(`Date: ${billDate}`); nl();
+
+    // Customer details
+    if (bill.customerName) { text(`Customer: ${bill.customerName}`); nl(); }
+    if (bill.customerPhone) { text(`Phone: ${bill.customerPhone}`); nl(); }
+    if (bill.customerGstin) { text(`GSTIN: ${bill.customerGstin}`); nl(); }
+
     text('--------------------------------'); nl();
 
     add(CMD.BOLD_ON);
