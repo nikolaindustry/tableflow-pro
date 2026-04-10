@@ -1086,6 +1086,24 @@ export default function OrderKiosk() {
                                       <span className="text-xs font-semibold px-3 py-1 rounded-full bg-success/15 text-success">Available</span>
                                     )}
                                   </div>
+                                  {table.is_occupied && (
+                                    <div className="flex items-center justify-center gap-2 mt-1">
+                                      <button
+                                        onClick={(e) => quickPrintReceipt(table, e)}
+                                        className="p-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+                                        title="Print Receipt"
+                                      >
+                                        <Printer className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={(e) => quickMarkAvailable(table, e)}
+                                        className="p-1.5 rounded-lg bg-success/10 hover:bg-success/20 text-success transition-colors"
+                                        title="Mark Available"
+                                      >
+                                        <Check className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  )}
                                 </button>
                               ))}
                             </div>
