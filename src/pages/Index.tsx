@@ -155,6 +155,7 @@ const Index = () => {
                 <div className="text-center p-8">
                   <ChefHat className="h-24 w-24 text-primary mx-auto mb-4" />
                   <p className="text-2xl font-bold text-foreground">RestroFlow</p>
+                  <p className="text-sm text-muted-foreground/70 mt-1">- by NIKOLAINDUSTRY</p>
                   <p className="text-muted-foreground">Restaurant Management Made Simple</p>
                 </div>
               </div>

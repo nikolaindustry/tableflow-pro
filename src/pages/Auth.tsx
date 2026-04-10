@@ -94,6 +94,7 @@ export default function Auth() {
             <UtensilsCrossed className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-foreground">RestroFlow</h1>
+          <p className="text-sm text-muted-foreground/70 mt-1">- by NIKOLAINDUSTRY</p>
           <p className="text-muted-foreground mt-2">Restaurant Management Made Simple</p>
         </div>
 

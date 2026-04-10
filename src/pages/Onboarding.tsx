@@ -40,6 +40,7 @@ export default function Onboarding() {
           <h1 className="text-3xl font-bold text-foreground">
             {restaurants.length > 0 ? 'Add New Restaurant' : 'Create Your Restaurant'}
           </h1>
+          <p className="text-sm text-muted-foreground/70 mt-1">- by NIKOLAINDUSTRY</p>
           <p className="text-muted-foreground mt-2">
             {restaurants.length > 0
               ? 'Set up another restaurant under your account'

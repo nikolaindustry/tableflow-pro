@@ -147,17 +147,20 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center gap-3 px-6 py-5 border-b border-sidebar-border">
-            <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
-              <UtensilsCrossed className="w-5 h-5 text-white" />
+          <div className="flex flex-col gap-2 px-6 py-5 border-b border-sidebar-border">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
+                <UtensilsCrossed className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-lg font-bold text-sidebar-foreground">RestroFlow</span>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="ml-auto lg:hidden text-sidebar-foreground/70 hover:text-sidebar-foreground"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <span className="text-lg font-bold text-sidebar-foreground">RestroFlow</span>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="ml-auto lg:hidden text-sidebar-foreground/70 hover:text-sidebar-foreground"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <span className="text-xs text-sidebar-foreground/50 -mt-1">- by NIKOLAINDUSTRY</span>
           </div>
 
           {/* Restaurant Selector */}
@@ -285,9 +288,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="flex items-center gap-2">
-            <UtensilsCrossed className="w-5 h-5 text-primary" />
-            <span className="font-semibold">RestroFlow</span>
+          <div className="flex flex-col items-center gap-0">
+            <div className="flex items-center gap-2">
+              <UtensilsCrossed className="w-5 h-5 text-primary" />
+              <span className="font-semibold">RestroFlow</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground -mt-1">- by NIKOLAINDUSTRY</span>
           </div>
           <div className="w-9" /> {/* Spacer for centering */}
         </header>
