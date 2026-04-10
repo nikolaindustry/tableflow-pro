@@ -37,6 +37,9 @@ import {
   LayoutGrid,
   List,
   Check,
+  User,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { useUSBPrinter } from '@/hooks/useUSBPrinter';
@@ -147,6 +150,10 @@ export default function OrderKiosk() {
   const [submitting, setSubmitting] = useState(false);
   const [showBillDialog, setShowBillDialog] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [showCustomerDetails, setShowCustomerDetails] = useState(false);
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerGstin, setCustomerGstin] = useState('');
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [cancelDialogItem, setCancelDialogItem] = useState<{ item: CartItem; orderId: string; itemId: string } | null>(null);
   const [cancellingItem, setCancellingItem] = useState(false);
@@ -793,6 +800,9 @@ export default function OrderKiosk() {
       restaurantPhone: currentRestaurant.phone,
       restaurantGstin: currentRestaurant.gstin,
       tableNumber: selectedTable.table_number,
+      customerName: customerName.trim() || undefined,
+      customerPhone: customerPhone.trim() || undefined,
+      customerGstin: customerGstin.trim() || undefined,
       items: activeOrder.items.map(item => ({
         name: item.menu_item?.name || 'Item',
         quantity: item.quantity,
@@ -800,7 +810,7 @@ export default function OrderKiosk() {
       })),
       total: activeOrder.total_amount,
     };
-  }, [selectedTable, activeOrder, currentRestaurant]);
+  }, [selectedTable, activeOrder, currentRestaurant, customerName, customerPhone, customerGstin]);
 
   const handlePrintBill = async (method: 'usb' | 'bluetooth' | 'browser' = 'usb') => {
     const billData = getBillData();
@@ -1858,7 +1868,15 @@ export default function OrderKiosk() {
       </div>
 
       {/* Billing Dialog */}
-      <Dialog open={showBillDialog} onOpenChange={setShowBillDialog}>
+      <Dialog open={showBillDialog} onOpenChange={(open) => {
+        setShowBillDialog(open);
+        if (!open) {
+          setShowCustomerDetails(false);
+          setCustomerName('');
+          setCustomerPhone('');
+          setCustomerGstin('');
+        }
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1881,6 +1899,40 @@ export default function OrderKiosk() {
                 <span>Grand Total</span>
                 <span>₹{grandTotal.toFixed(2)}</span>
               </div>
+            </div>
+
+            {/* Customer Details (Optional) */}
+            <div className="border rounded-lg overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between p-3 text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
+                onClick={() => setShowCustomerDetails(!showCustomerDetails)}
+              >
+                <span className="flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  Add Customer Details (Optional)
+                </span>
+                {showCustomerDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {showCustomerDetails && (
+                <div className="p-3 pt-0 space-y-2">
+                  <Input
+                    placeholder="Customer Name"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Phone Number"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Customer GSTIN"
+                    value={customerGstin}
+                    onChange={(e) => setCustomerGstin(e.target.value)}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Print Options */}
