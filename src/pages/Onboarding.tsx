@@ -44,7 +44,7 @@ export default function Onboarding() {
           <p className="text-muted-foreground mt-2">
             {restaurants.length > 0
               ? 'Set up another restaurant under your account'
-              : "Let's get your restaurant set up on Grape Embassy"}
+              : "Let's get your restaurant set up on RestroFlow"}
           </p>
         </div>
 

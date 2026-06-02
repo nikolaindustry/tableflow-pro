@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
 import { supabase } from '@/integrations/supabase/client';
-import { offlineQuery, offlineMutate, offlineDelete } from '@/services/offlineDataService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,20 +42,14 @@ export default function Kitchens() {
     if (!currentRestaurant) return;
 
     try {
-      const res = await offlineQuery(
-        async () => {
-          const r = await supabase
-            .from('kitchens')
-            .select('*')
-            .eq('restaurant_id', currentRestaurant.id)
-            .order('created_at', { ascending: true });
-          return r;
-        },
-        { table: 'kitchens', filters: { restaurant_id: currentRestaurant.id } }
-      );
+      const { data, error } = await supabase
+        .from('kitchens')
+        .select('*')
+        .eq('restaurant_id', currentRestaurant.id)
+        .order('created_at', { ascending: true });
 
-      if (res.error && !res.fromCache) throw res.error;
-      setKitchens((res.data || []) as Kitchen[]);
+      if (error) throw error;
+      setKitchens(data || []);
     } catch (error) {
       console.error('Error fetching kitchens:', error);
     } finally {
@@ -93,47 +86,22 @@ export default function Kitchens() {
 
     try {
       if (editingKitchen) {
-        const updatedData = {
-          id: editingKitchen.id,
-          name,
-          description: description || null,
-          is_active: isActive,
-        };
-        await offlineMutate(
-          'kitchens',
-          updatedData,
-          async () => {
-            const res = await supabase
-              .from('kitchens')
-              .update({ name, description: description || null, is_active: isActive })
-              .eq('id', editingKitchen.id)
-              .select()
-              .single();
-            return res;
-          }
-        );
+        const { error } = await supabase
+          .from('kitchens')
+          .update({ name, description: description || null, is_active: isActive })
+          .eq('id', editingKitchen.id);
+
+        if (error) throw error;
         toast.success('Kitchen updated successfully');
       } else {
-        const newId = crypto.randomUUID();
-        const newKitchen = {
-          id: newId,
+        const { error } = await supabase.from('kitchens').insert({
           restaurant_id: currentRestaurant.id,
           name,
           description: description || null,
           is_active: isActive,
-        };
-        await offlineMutate(
-          'kitchens',
-          newKitchen,
-          async () => {
-            const res = await supabase
-              .from('kitchens')
-              .insert(newKitchen)
-              .select()
-              .single();
-            return res;
-          }
-        );
+        });
+
+        if (error) throw error;
         toast.success('Kitchen created successfully');
       }
 
@@ -149,14 +117,8 @@ export default function Kitchens() {
     if (!confirm('Are you sure you want to delete this kitchen?')) return;
 
     try {
-      await offlineDelete(
-        'kitchens',
-        id,
-        async () => {
-          const res = await supabase.from('kitchens').delete().eq('id', id).select().single();
-          return res;
-        }
-      );
+      const { error } = await supabase.from('kitchens').delete().eq('id', id);
+      if (error) throw error;
       toast.success('Kitchen deleted');
       fetchKitchens();
     } catch (error: any) {
@@ -166,19 +128,12 @@ export default function Kitchens() {
 
   const toggleActive = async (kitchen: Kitchen) => {
     try {
-      await offlineMutate(
-        'kitchens',
-        { id: kitchen.id, is_active: !kitchen.is_active },
-        async () => {
-          const res = await supabase
-            .from('kitchens')
-            .update({ is_active: !kitchen.is_active })
-            .eq('id', kitchen.id)
-            .select()
-            .single();
-          return res;
-        }
-      );
+      const { error } = await supabase
+        .from('kitchens')
+        .update({ is_active: !kitchen.is_active })
+        .eq('id', kitchen.id);
+
+      if (error) throw error;
       toast.success(`Kitchen ${!kitchen.is_active ? 'activated' : 'deactivated'}`);
       fetchKitchens();
     } catch (error: any) {

@@ -1,9 +1,8 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useAuth } from '@/contexts/LocalAuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useRestaurant } from '@/contexts/RestaurantContext';
 import { useActiveOrderCount } from '@/hooks/useActiveOrderCount';
-import { isElectron } from '@/services/printerBridge';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -32,13 +31,6 @@ import {
   Users,
   Database as DatabaseIcon,
   Wallet,
-  Wifi,
-  WifiOff,
-  RefreshCw,
-  Network,
-  Columns,
-  Trash2,
-  Eraser,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Database } from '@/integrations/supabase/types';
@@ -68,7 +60,6 @@ const getNavItems = (slug: string): NavItem[] => [
   { href: `/dashboard/${slug}/staff`, label: 'Staff', icon: Users, roles: ['owner', 'manager'] },
   { href: `/dashboard/${slug}/data`, label: 'Data Manager', icon: DatabaseIcon, roles: ['owner'] },
   { href: `/dashboard/${slug}/settings`, label: 'Settings', icon: SettingsIcon, roles: ['owner'] },
-  { href: `/dashboard/${slug}/lan-settings`, label: 'LAN Network', icon: Network, roles: ['owner'] },
   { href: `/dashboard/${slug}/kitchen-view`, label: 'Kitchen View', icon: ChefHat, roles: ['owner', 'manager', 'chef'] },
 ];
 
@@ -80,35 +71,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const navigate = useNavigate();
   const { slug } = useParams();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<{ isOnline: boolean; pendingCount: number }>({ isOnline: true, pendingCount: 0 });
-  const [syncing, setSyncing] = useState(false);
-  const [browserOffline, setBrowserOffline] = useState(false);
-
-  // Connectivity tracking (simplified for local mode)
-  useEffect(() => {
-    // No connectivity tracking needed in local-only mode
-    return () => {};
-  }, []);
-
-  // Poll pending count (disabled in local mode)
-  useEffect(() => {
-    // No sync in local mode
-  }, []);
-
-  const handleForceSync = async () => {
-    // No sync in local mode
-    return;
-  };
-
-  const handleCleanupOrphaned = async () => {
-    // No cleanup needed in local mode
-    return;
-  };
-
-  const handleClearCache = async () => {
-    // Clear cache functionality removed in local-only mode
-    return;
-  };
 
   // Sync restaurant from URL slug
   useEffect(() => {
@@ -190,7 +152,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
                 <UtensilsCrossed className="w-5 h-5 text-white" />
               </div>
-              <span className="text-lg font-bold text-sidebar-foreground">Grape Embassy</span>
+              <span className="text-lg font-bold text-sidebar-foreground">RestroFlow</span>
               <button
                 onClick={() => setSidebarOpen(false)}
                 className="ml-auto lg:hidden text-sidebar-foreground/70 hover:text-sidebar-foreground"
@@ -198,7 +160,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <span className="text-xs text-sidebar-foreground/50 -mt-1">- Dev by NIKOLAINDUSTRY (P) LTD.</span>
+            <span className="text-xs text-sidebar-foreground/50 -mt-1">- by NIKOLAINDUSTRY</span>
           </div>
 
           {/* Restaurant Selector */}
@@ -279,49 +241,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             })}
           </nav>
 
-          {/* Sync Status (Electron only) */}
-          {isElectron() && (
-            <div className="px-4 py-2 border-t border-sidebar-border">
-              <div className="flex items-center justify-between px-2">
-                <div className="flex items-center gap-2 text-xs text-sidebar-foreground/70">
-                  {syncStatus.isOnline ? (
-                    <Wifi className="w-3.5 h-3.5 text-green-500" />
-                  ) : (
-                    <WifiOff className="w-3.5 h-3.5 text-red-500" />
-                  )}
-                  <span>{syncStatus.isOnline ? 'Online' : 'Offline'}</span>
-                  {syncStatus.pendingCount > 0 && (
-                    <Badge variant="secondary" className="h-4 text-[10px] px-1">
-                      {syncStatus.pendingCount} pending
-                    </Badge>
-                  )}
-                </div>
-                <button
-                  onClick={handleForceSync}
-                  disabled={syncing || !syncStatus.isOnline}
-                  className="p-1 rounded hover:bg-sidebar-accent disabled:opacity-50"
-                  title="Force sync now"
-                >
-                  <RefreshCw className={cn("w-3.5 h-3.5 text-sidebar-foreground/70", syncing && "animate-spin")} />
-                </button>
-                <button
-                  onClick={handleCleanupOrphaned}
-                  className="p-1 rounded hover:bg-sidebar-accent"
-                  title="Clean up orphaned local records"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-sidebar-foreground/70 hover:text-red-500" />
-                </button>
-                <button
-                  onClick={handleClearCache}
-                  className="p-1 rounded hover:bg-sidebar-accent"
-                  title="Clear all cached data (forces re-sync from Supabase)"
-                >
-                  <Eraser className="w-3.5 h-3.5 text-sidebar-foreground/70 hover:text-orange-500" />
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* User Menu */}
           <div className="p-4 border-t border-sidebar-border">
             <div className="mb-2 px-2">
@@ -336,33 +255,19 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent"
                 >
                   <div className="w-8 h-8 rounded-full bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground text-sm font-medium mr-2">
-                    {user?.email?.charAt(0).toUpperCase() || 'U'}
+                    {user?.email?.charAt(0).toUpperCase()}
                   </div>
-                  <span className="truncate text-sm">{user?.email || 'User'}</span>
+                  <span className="truncate text-sm">{user?.email}</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
-                {/* Global Settings - Always visible */}
-                <DropdownMenuItem onClick={() => navigate('/settings')}>
-                  <SettingsIcon className="w-4 h-4 mr-2" />
-                  Settings
-                </DropdownMenuItem>
-                
                 {currentRole === 'owner' && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => navigate(`/dashboard/${currentRestaurant?.slug}/settings`)}>
-                      <SettingsIcon className="w-4 h-4 mr-2" />
-                      Restaurant Settings
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigate(`/dashboard/${currentRestaurant?.slug}/lan-settings`)}>
-                      <Network className="w-4 h-4 mr-2" />
-                      LAN Network
-                    </DropdownMenuItem>
-                  </>
+                  <DropdownMenuItem onClick={() => navigate(`/dashboard/${currentRestaurant?.slug}/settings`)}>
+                    <SettingsIcon className="w-4 h-4 mr-2" />
+                    Settings
+                  </DropdownMenuItem>
                 )}
-                
-                <DropdownMenuSeparator />
+                {currentRole === 'owner' && <DropdownMenuSeparator />}
                 <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
                   <LogOut className="w-4 h-4 mr-2" />
                   Sign Out
@@ -386,20 +291,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="flex flex-col items-center gap-0">
             <div className="flex items-center gap-2">
               <UtensilsCrossed className="w-5 h-5 text-primary" />
-              <span className="font-semibold">Grape Embassy</span>
+              <span className="font-semibold">RestroFlow</span>
             </div>
-            <span className="text-[10px] text-muted-foreground -mt-1">- Dev by NIKOLAINDUSTRY (P) LTD.</span>
+            <span className="text-[10px] text-muted-foreground -mt-1">- by NIKOLAINDUSTRY</span>
           </div>
           <div className="w-9" /> {/* Spacer for centering */}
         </header>
-
-        {/* Offline Banner */}
-        {browserOffline && (
-          <div className="bg-yellow-500/90 text-yellow-950 px-4 py-2 text-center text-sm font-medium flex items-center justify-center gap-2">
-            <WifiOff className="w-4 h-4" />
-            Offline Mode - Using cached data. Changes will sync when connection is restored.
-          </div>
-        )}
 
         {/* Page Content */}
         <div className={cn(

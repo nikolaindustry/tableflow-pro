@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { offlineQuery } from '@/services/offlineDataService';
 import { useToast } from '@/hooks/use-toast';
 
 export type StaffRole = 'owner' | 'manager' | 'waiter' | 'chef';
@@ -46,21 +45,15 @@ export function useStaffMembers(restaurantId: string | undefined) {
     }
 
     try {
-      const result = await offlineQuery(
-        async () => {
-          const res = await supabase
-            .from('staff_members')
-            .select('*')
-            .eq('restaurant_id', restaurantId)
-            .order('role', { ascending: true })
-            .order('full_name', { ascending: true });
-          return res;
-        },
-        { table: 'staff_members', filters: { restaurant_id: restaurantId } }
-      );
+      const { data, error } = await supabase
+        .from('staff_members')
+        .select('*')
+        .eq('restaurant_id', restaurantId)
+        .order('role', { ascending: true })
+        .order('full_name', { ascending: true });
 
-      if (result.error && !result.fromCache) throw result.error;
-      setStaffMembers(((result.data || []) as StaffMember[]));
+      if (error) throw error;
+      setStaffMembers((data || []) as StaffMember[]);
     } catch (error: any) {
       console.error('Error fetching staff members:', error);
       toast({

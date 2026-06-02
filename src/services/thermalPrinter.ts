@@ -12,11 +12,6 @@ export interface BillData {
   restaurantPhone?: string | null;
   restaurantGstin?: string | null;
   tableNumber?: string;
-  floorName?: string;
-  orderId?: string;
-  billNumber?: number;
-  showQrCode?: boolean;
-  paymentQrContent?: string | null;
   customerName?: string;
   customerPhone?: string;
   customerGstin?: string;
@@ -26,26 +21,11 @@ export interface BillData {
     price: number;
   }[];
   subtotal?: number;
-  discountAmount?: number;
   cgstPercentage?: number;
   sgstPercentage?: number;
   cgstAmount?: number;
   sgstAmount?: number;
   total: number;
-}
-
-export interface SummaryPrintData {
-  restaurantName: string;
-  restaurantAddress?: string | null;
-  restaurantPhone?: string | null;
-  tableNumber?: string;
-  floorName?: string;
-  billNumber?: number;
-  items: {
-    name: string;
-    quantity: number;
-  }[];
-  timestamp?: string;
 }
 
 class ThermalPrinterService {
@@ -172,11 +152,6 @@ class ThermalPrinterService {
         .align('left')
         .text(`Table: ${bill.tableNumber || 'Takeaway'}\n`)
         .text(`Date: ${billDate}\n`);
-      
-      // Add bill number
-      if (bill.billNumber) {
-        printer.text(`Bill #: ${String(bill.billNumber).padStart(3, '0')}\n`);
-      }
 
       if (bill.customerName) { printer.text(`Customer: ${bill.customerName}\n`); }
       if (bill.customerPhone) { printer.text(`Phone: ${bill.customerPhone}\n`); }
@@ -204,11 +179,6 @@ class ThermalPrinterService {
       const subtotal = bill.subtotal || bill.total;
       printer.text(`Subtotal: ₹${subtotal.toFixed(2)}\n`);
 
-      // Discount (if any)
-      if (bill.discountAmount && bill.discountAmount > 0) {
-        printer.text(`Discount: -₹${bill.discountAmount.toFixed(2)}\n`);
-      }
-
       // Add GST details if available
       if (bill.cgstPercentage && bill.cgstAmount) {
         printer.text(`CGST (${bill.cgstPercentage}%): ₹${bill.cgstAmount.toFixed(2)}\n`);
@@ -225,28 +195,7 @@ class ThermalPrinterService {
         .align('center')
         .text('\n')
         .text('Thank you for dining with us!\n')
-        .text('Please visit again\n');
-
-      // QR code section
-      // If payment QR content is provided, use it instead of Order ID QR
-      if (bill.paymentQrContent) {
-        console.log('[ThermalPrinter] Printing payment QR code...');
-        printer
-          .text('\n')
-          .text('Scan to Pay\n')
-          .qr(bill.paymentQrContent);
-      } else if (bill.showQrCode && bill.orderId) {
-        // Fallback to Order ID QR if no payment QR
-        const shortId = bill.orderId.slice(-12).toUpperCase();
-        printer
-          .text('\n')
-          .text(`Order: ${shortId}\n`)
-          .qr(bill.orderId);
-      } else {
-        console.log('[ThermalPrinter] No QR code to print');
-      }
-
-      await printer
+        .text('Please visit again\n')
         .text('\n\n\n')
         .cutPaper()
         .write();
@@ -309,7 +258,6 @@ class ThermalPrinterService {
           <div class="divider"></div>
           <p><strong>Table:</strong> ${bill.tableNumber || 'Takeaway'}</p>
           <p><strong>Date:</strong> ${billDate}</p>
-          ${bill.billNumber ? `<p><strong>Bill #:</strong> ${String(bill.billNumber).padStart(3, '0')}</p>` : ''}
           ${bill.customerName ? `<p><strong>Customer:</strong> ${bill.customerName}</p>` : ''}
           ${bill.customerPhone ? `<p><strong>Phone:</strong> ${bill.customerPhone}</p>` : ''}
           ${bill.customerGstin ? `<p><strong>GSTIN:</strong> ${bill.customerGstin}</p>` : ''}
@@ -333,12 +281,6 @@ class ThermalPrinterService {
               <td colspan="3">Subtotal</td>
               <td style="text-align: right;">₹${(bill.subtotal || bill.total).toFixed(2)}</td>
             </tr>
-            ${bill.discountAmount && bill.discountAmount > 0 ? `
-            <tr>
-              <td colspan="3">Discount</td>
-              <td style="text-align: right;">-₹${bill.discountAmount.toFixed(2)}</td>
-            </tr>
-            ` : ''}
             ${bill.cgstPercentage && bill.cgstAmount ? `
             <tr>
               <td colspan="3">CGST (${bill.cgstPercentage}%)</td>
@@ -359,190 +301,6 @@ class ThermalPrinterService {
           <div class="footer">
             <p>Thank you for dining with us!</p>
             <p>Please visit again</p>
-            ${bill.paymentQrContent ? `
-            <div class="qr-section">
-              <p style="font-size:10px;margin:8px 0 4px;">Scan to Pay</p>
-              <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(bill.paymentQrContent)}" 
-                   width="180" height="180" style="display:block;margin:0 auto;"
-                   onerror="this.style.display='none';" />
-            </div>
-            ` : bill.showQrCode && bill.orderId ? `
-            <div class="qr-section">
-              <p style="font-size:10px;margin:8px 0 4px;">Order ID</p>
-              <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(bill.orderId)}" 
-                   width="180" height="180" style="display:block;margin:0 auto;"
-                   onerror="this.style.display='none';document.getElementById('order-id-fallback').style.display='block';" />
-              <p id="order-id-fallback" style="display:none;font-size:9px;word-break:break-all;border:1px solid #ccc;padding:4px;">
-                ${bill.orderId}
-              </p>
-            </div>
-            ` : ''}
-          </div>
-        </body>
-      </html>
-    `);
-
-    printWindow.document.close();
-    printWindow.print();
-  }
-
-  /**
-   * Print summary receipt (items and quantities only, no prices)
-   */
-  async printSummaryViaBluetooth(summary: SummaryPrintData): Promise<void> {
-    if (!this.isNative) {
-      throw new Error('Bluetooth printing is only available on mobile devices');
-    }
-
-    if (!this.connectedDevice) {
-      throw new Error('No printer connected. Please connect a printer first.');
-    }
-
-    const printDate = new Date().toLocaleString('en-IN', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
-
-    try {
-      // Build the summary receipt using ESC/POS commands
-      const printer = CapacitorThermalPrinter.begin()
-        .align('center')
-        .bold()
-        .doubleWidth()
-        .text(`${summary.restaurantName}\n`)
-        .clearFormatting()
-        .align('center');
-
-      if (summary.restaurantAddress) {
-        printer.text(`${summary.restaurantAddress}\n`);
-      }
-      if (summary.restaurantPhone) {
-        printer.text(`Phone: ${summary.restaurantPhone}\n`);
-      }
-
-      printer
-        .text('--------------------------------\n')
-        .align('center')
-        .bold()
-        .text('ORDER SUMMARY\n')
-        .clearFormatting()
-        .align('left');
-
-      if (summary.floorName && summary.tableNumber) {
-        printer.text(`Floor: ${summary.floorName}\n`);
-      }
-      printer.text(`Table: ${summary.tableNumber || 'Takeaway'}\n`);
-      printer.text(`Date: ${printDate}\n`);
-      
-      if (summary.billNumber) {
-        printer.text(`Bill #: ${String(summary.billNumber).padStart(3, '0')}\n`);
-      }
-
-      printer
-        .text('--------------------------------\n')
-        .bold()
-        .text('Item                  Qty\n')
-        .clearFormatting()
-        .text('--------------------------------\n');
-
-      for (const item of summary.items) {
-        const itemName = item.name.substring(0, 20).padEnd(20);
-        printer.text(`${itemName}${item.quantity}\n`);
-      }
-
-      printer
-        .text('--------------------------------\n')
-        .align('center')
-        .text('\n')
-        .text('Please verify order contents\n')
-        .text('Thank you!\n')
-        .text('\n\n\n')
-        .cutPaper();
-
-      await printer.write();
-    } catch (error) {
-      console.error('Summary Bluetooth print failed:', error);
-      throw new Error('Failed to print summary via Bluetooth');
-    }
-  }
-
-  /**
-   * Print summary receipt via browser (items and quantities only)
-   */
-  printSummaryViaBrowser(summary: SummaryPrintData): void {
-    const printDate = new Date().toLocaleString('en-IN', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
-
-    const itemsHtml = summary.items
-      .map(
-        (item) => `
-      <tr>
-        <td style="padding: 6px 0;">${item.name}</td>
-        <td style="text-align: center; font-weight: bold;">${item.quantity}</td>
-      </tr>
-    `
-      )
-      .join('');
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      throw new Error('Please allow popups to print the summary');
-    }
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Order Summary - ${summary.restaurantName}</title>
-          <style>
-            body { font-family: 'Courier New', monospace; font-size: 12px; padding: 20px; max-width: 300px; margin: 0 auto; }
-            .header { text-align: center; margin-bottom: 20px; }
-            .title { font-size: 16px; font-weight: bold; margin: 10px 0; }
-            .info { margin: 5px 0; }
-            table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-            th { text-align: left; border-bottom: 2px solid #000; padding: 6px 0; font-weight: bold; }
-            td { padding: 6px 0; border-bottom: 1px solid #ccc; }
-            .footer { text-align: center; margin-top: 20px; font-size: 11px; }
-            .divider { border-top: 2px dashed #000; margin: 15px 0; }
-            @media print {
-              body { padding: 0; }
-              @page { margin: 10mm; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="title">${summary.restaurantName}</div>
-            ${summary.restaurantAddress ? `<div class="info">${summary.restaurantAddress}</div>` : ''}
-            ${summary.restaurantPhone ? `<div class="info">Phone: ${summary.restaurantPhone}</div>` : ''}
-          </div>
-          <div class="divider"></div>
-          <div style="text-align: center; font-weight: bold; margin: 10px 0;">ORDER SUMMARY</div>
-          <div class="divider"></div>
-          <div class="info">
-            ${summary.floorName && summary.tableNumber ? `<div>Floor: ${summary.floorName}</div>` : ''}
-            <div>Table: ${summary.tableNumber || 'Takeaway'}</div>
-            <div>Date: ${printDate}</div>
-            ${summary.billNumber ? `<div>Bill #: ${String(summary.billNumber).padStart(3, '0')}</div>` : ''}
-          </div>
-          <div class="divider"></div>
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 70%;">Item</th>
-                <th style="width: 30%; text-align: center;">Qty</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemsHtml}
-            </tbody>
-          </table>
-          <div class="divider"></div>
-          <div class="footer">
-            <p>Please verify order contents</p>
-            <p>Thank you!</p>
           </div>
         </body>
       </html>

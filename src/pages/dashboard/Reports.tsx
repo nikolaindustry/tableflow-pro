@@ -30,7 +30,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { 
   BarChart, 
   Bar, 
@@ -65,23 +64,13 @@ import {
   CreditCard,
   Smartphone,
   Pencil,
-  Trash2,
-  Bluetooth,
-  Usb,
-  RefreshCw,
-  Settings2
+  Trash2
 } from 'lucide-react';
 import { format, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO, eachDayOfInterval, eachHourOfInterval, addHours } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { offlineQuery, offlineMutate, offlineDelete, isOffline } from '@/services/offlineDataService';
-import { getDataClient } from '@/services/localDataService';
-import { BillingDialog } from '@/components/BillingDialog';
-import { BillEditDialog } from '@/components/BillEditDialog';
-import { useThermalPrinter } from '@/hooks/useThermalPrinter';
-import { useUSBPrinter } from '@/hooks/useUSBPrinter';
 
 type OrderStatus = 'pending' | 'cooking' | 'ready' | 'served' | 'cancelled';
 
@@ -93,10 +82,7 @@ interface Order {
   notes: string | null;
   table_id: string | null;
   payment_method: string | null;
-  table?: { 
-    table_number: string;
-    floor: { name: string };
-  } | null;
+  table?: { table_number: string } | null;
   order_items: {
     id: string;
     quantity: number;
@@ -133,452 +119,6 @@ const CHART_COLORS = [
 
 type DateRange = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
 
-// ── Report Print Dialog (mirrors BillingDialog printer UX) ──────────────────
-interface ReportStats {
-  totalRevenue: number;
-  completedOrders: number;
-  avgOrderValue: number;
-  cashRevenue: number;
-  onlineRevenue: number;
-  cgstTotal: number;
-  sgstTotal: number;
-  grandTotal: number;
-}
-
-interface ReportPrintDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  currentRestaurant: { name: string; address?: string | null; phone?: string | null; cgst_percentage?: number | null; sgst_percentage?: number | null } | null;
-  dateRange: string;
-  stats: ReportStats;
-  popularItems: { name: string; quantity: number; revenue: number }[];
-}
-
-function ReportPrintDialogInner({
-  open,
-  onOpenChange,
-  currentRestaurant,
-  dateRange,
-  stats,
-  popularItems,
-}: ReportPrintDialogProps) {
-  const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing: thermalPrinting } = useThermalPrinter();
-  const {
-    connectedPrinter: usbPrinter,
-    printing: usbPrinting,
-    isAvailable: isUSBAvailable,
-    connectPrinter: connectUSB,
-    disconnectPrinter,
-    printBill: printUSB,
-    availableDevices,
-    refreshDevices,
-    isElectronApp,
-  } = useUSBPrinter();
-
-  const [showDeviceList, setShowDeviceList] = useState(false);
-  const [loadingDevices, setLoadingDevices] = useState(false);
-  const [windowsPrinters, setWindowsPrinters] = useState<string[]>([]);
-  const [selectedWindowsPrinter, setSelectedWindowsPrinter] = useState('');
-  const [matchingPrinters, setMatchingPrinters] = useState<string[]>([]); // Printers matching current VID/PID
-
-  // Auto-refresh device list when dialog opens
-  useEffect(() => {
-    if (open && isElectronApp) {
-      setLoadingDevices(true);
-      refreshDevices().finally(() => setLoadingDevices(false));
-    }
-  }, [open, isElectronApp, refreshDevices]);
-
-  const fetchWindowsPrinters = async () => {
-    try {
-      const api = (window as any).electronAPI?.printer;
-      if (api?.listWindowsPrinters) {
-        const result = await api.listWindowsPrinters();
-        if (result.success && result.printers) {
-          setWindowsPrinters(result.printers);
-          if (result.printers.length > 0 && !selectedWindowsPrinter) {
-            setSelectedWindowsPrinter(result.printers[0]);
-          }
-        }
-      }
-    } catch (err) {
-      console.error('[ReportPrintDialog] Failed to fetch Windows printers:', err);
-    }
-  };
-
-  // Fetch Windows printers matching a specific VID/PID
-  const fetchMatchingPrinters = async (vendorId: number, productId: number) => {
-    try {
-      console.log('[ReportPrintDialog] Fetching printers matching VID/PID:', { vendorId, productId });
-      const api = (window as any).electronAPI?.printer;
-      if (api?.listByVidPid) {
-        const result = await api.listByVidPid(vendorId, productId);
-        if (result.success && result.printers) {
-          setMatchingPrinters(result.printers);
-          if (result.printers.length > 0) {
-            setSelectedWindowsPrinter(result.printers[0]);
-          }
-        }
-      }
-    } catch (err) {
-      console.error('[ReportPrintDialog] Failed to fetch matching printers:', err);
-    }
-  };
-
-  const handleConnectUSB = async (vendorId?: number, productId?: number) => {
-    try {
-      // Clear previous printers before connecting
-      setMatchingPrinters([]);
-      setWindowsPrinters([]);
-      setSelectedWindowsPrinter('');
-      
-      if (usbPrinter) await disconnectPrinter();
-      await connectUSB(vendorId, productId);
-      setShowDeviceList(false);
-      // Fetch ALL Windows printers to give user full choice
-      if (isElectronApp) {
-        await fetchWindowsPrinters();
-        
-        // Auto-switch to the Windows printer that matches the connected USB device
-        if (vendorId !== undefined && productId !== undefined) {
-          try {
-            const api = (window as any).electronAPI?.printer;
-            if (api?.listByVidPid) {
-              const result = await api.listByVidPid(vendorId, productId);
-              if (result.success && result.printers && result.printers.length > 0) {
-                const matchingPrinter = result.printers[0];
-                setSelectedWindowsPrinter(matchingPrinter);
-                
-                // Switch to this printer
-                if (api?.switchWindowsPrinter) {
-                  await api.switchWindowsPrinter(matchingPrinter);
-                  console.log('[ReportPrintDialog] Auto-switched to Windows printer:', matchingPrinter);
-                }
-              }
-            }
-          } catch (err) {
-            console.error('[ReportPrintDialog] Failed to auto-switch Windows printer:', err);
-          }
-        }
-      }
-    } catch (error: any) {
-      console.error('[ReportPrintDialog] Connect error:', error);
-    }
-  };
-
-  const handleRefreshDevices = async () => {
-    setLoadingDevices(true);
-    try { await refreshDevices(); } catch { /* ignore */ }
-    setLoadingDevices(false);
-  };
-
-  // Build BillData for the report and print
-  const handlePrint = async (method: 'usb' | 'bluetooth' | 'browser') => {
-    if (!currentRestaurant) return;
-
-    const dateRangeLabel = dateRange === 'today' ? 'Today' :
-      dateRange === 'yesterday' ? 'Yesterday' :
-      dateRange === 'week' ? 'This Week' :
-      dateRange === 'month' ? 'This Month' : 'Custom Range';
-
-    const reportBillData = {
-      restaurantName: currentRestaurant.name,
-      restaurantAddress: currentRestaurant.address,
-      restaurantPhone: currentRestaurant.phone,
-      tableNumber: 'REPORT',
-      items: [
-        { name: `Period: ${dateRangeLabel}`, quantity: 1, price: 0 },
-        { name: '--- REVENUE SUMMARY ---', quantity: 1, price: 0 },
-        { name: 'Subtotal (excl. GST)', quantity: 1, price: stats.totalRevenue },
-        { name: 'Completed Orders', quantity: stats.completedOrders, price: 0 },
-        { name: 'Average Order Value', quantity: 1, price: Math.round(stats.avgOrderValue) },
-        { name: '--- PAYMENT BREAKDOWN ---', quantity: 1, price: 0 },
-        { name: 'Cash Payments', quantity: 1, price: stats.cashRevenue },
-        { name: 'Online Payments', quantity: 1, price: stats.onlineRevenue },
-        { name: '--- TOP SELLING ITEMS ---', quantity: 1, price: 0 },
-        ...popularItems.slice(0, 5).map(item => ({
-          name: item.name,
-          quantity: item.quantity,
-          price: item.revenue,
-        })),
-      ],
-      subtotal: stats.totalRevenue,
-      total: stats.grandTotal,
-      cgstPercentage: currentRestaurant.cgst_percentage ?? 0,
-      sgstPercentage: currentRestaurant.sgst_percentage ?? 0,
-      cgstAmount: stats.cgstTotal,
-      sgstAmount: stats.sgstTotal,
-    };
-
-    try {
-      if (method === 'usb') {
-        await printUSB(reportBillData);
-        onOpenChange(false);
-      } else if (method === 'bluetooth' && connectedDevice) {
-        await printThermal(reportBillData, true);
-        onOpenChange(false);
-      } else {
-        // Browser fallback
-        const cgstPct = currentRestaurant.cgst_percentage ?? 0;
-        const sgstPct = currentRestaurant.sgst_percentage ?? 0;
-        const reportLines = [
-          '', '========================================',
-          '         SALES REPORT SUMMARY           ',
-          '========================================', '',
-          `Restaurant: ${currentRestaurant.name}`,
-          `Period: ${dateRangeLabel}`,
-          `Date: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, '',
-          '--- REVENUE SUMMARY ---', '',
-          `Subtotal (excl. GST): ₹${stats.totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-          `Completed Orders:  ${stats.completedOrders}`,
-          `Avg Order Value:   ₹${Math.round(stats.avgOrderValue).toLocaleString()}`,
-          ...(stats.cgstTotal > 0 ? [`CGST (${cgstPct}%):        ₹${stats.cgstTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`] : []),
-          ...(stats.sgstTotal > 0 ? [`SGST (${sgstPct}%):        ₹${stats.sgstTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`] : []),
-          ...(stats.cgstTotal > 0 || stats.sgstTotal > 0 ? [
-            '----------------------------------------',
-            `Grand Total (incl. GST): ₹${stats.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-          ] : []),
-          '',
-          '--- PAYMENT BREAKDOWN ---', '',
-          `Cash:    ₹${stats.cashRevenue.toLocaleString()}`,
-          `Online:  ₹${stats.onlineRevenue.toLocaleString()}`, '',
-          '--- TOP ITEMS ---', '',
-          ...popularItems.slice(0, 5).map((item, idx) => `${idx + 1}. ${item.name} (${item.quantity} sold)`),
-          '', '========================================', '', '', '',
-        ];
-        const printWindow = window.open('', '_blank', 'width=300,height=600');
-        if (printWindow) {
-          printWindow.document.write(`<!DOCTYPE html><html><head><title>Sales Report</title>
-            <style>* { margin:0;padding:0;box-sizing:border-box; } body { font-family:'Courier New',monospace;font-size:12px;width:80mm;padding:5mm; } pre { white-space:pre-wrap;word-wrap:break-word; }</style>
-            </head><body><pre>${reportLines.join('\n')}</pre></body></html>`);
-          printWindow.document.close();
-          printWindow.focus();
-          setTimeout(() => { printWindow.print(); printWindow.close(); }, 250);
-          onOpenChange(false);
-        }
-      }
-    } catch (error: any) {
-      console.error('[ReportPrintDialog] Print error:', error);
-    }
-  };
-
-  const dateRangeLabel = dateRange === 'today' ? 'Today' :
-    dateRange === 'yesterday' ? 'Yesterday' :
-    dateRange === 'week' ? 'This Week' :
-    dateRange === 'month' ? 'This Month' : 'Custom Range';
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Printer className="w-5 h-5" />
-            Print Report Summary
-          </DialogTitle>
-          <DialogDescription>
-            Print the current report summary to your thermal printer
-          </DialogDescription>
-        </DialogHeader>
-
-        {/* Report Preview */}
-        <div className="bg-muted rounded-md p-4 font-mono text-xs space-y-1 max-h-48 overflow-y-auto">
-          <p className="text-center font-bold">{currentRestaurant?.name}</p>
-          <p className="text-center text-muted-foreground">SALES REPORT</p>
-          <Separator className="my-2" />
-          <p className="text-muted-foreground">Period: {dateRangeLabel}</p>
-          <p className="text-muted-foreground">Date: {format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
-          <Separator className="my-2" />
-          <p className="font-semibold">REVENUE SUMMARY</p>
-          <div className="flex justify-between"><span>Subtotal (excl. GST)</span><span>₹{stats.totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
-          <div className="flex justify-between"><span>Completed Orders</span><span>{stats.completedOrders}</span></div>
-          <div className="flex justify-between"><span>Avg Order Value</span><span>₹{Math.round(stats.avgOrderValue).toLocaleString()}</span></div>
-          {stats.cgstTotal > 0 && (
-            <div className="flex justify-between text-muted-foreground"><span>CGST ({currentRestaurant?.cgst_percentage}%)</span><span>₹{stats.cgstTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
-          )}
-          {stats.sgstTotal > 0 && (
-            <div className="flex justify-between text-muted-foreground"><span>SGST ({currentRestaurant?.sgst_percentage}%)</span><span>₹{stats.sgstTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
-          )}
-          {(stats.cgstTotal > 0 || stats.sgstTotal > 0) && (
-            <div className="flex justify-between font-semibold border-t pt-1 mt-1"><span>Grand Total (incl. GST)</span><span>₹{stats.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
-          )}
-          <Separator className="my-2" />
-          <p className="font-semibold">PAYMENT BREAKDOWN</p>
-          <div className="flex justify-between"><span>Cash</span><span>₹{stats.cashRevenue.toLocaleString()}</span></div>
-          <div className="flex justify-between"><span>Online</span><span>₹{stats.onlineRevenue.toLocaleString()}</span></div>
-          {popularItems.length > 0 && (
-            <>
-              <Separator className="my-2" />
-              <p className="font-semibold">TOP ITEMS</p>
-              {popularItems.slice(0, 5).map((item, idx) => (
-                <div key={item.name} className="flex justify-between">
-                  <span>{idx + 1}. {item.name}</span>
-                  <span>{item.quantity} sold</span>
-                </div>
-              ))}
-            </>
-          )}
-        </div>
-
-        <Separator />
-
-        {/* Print Buttons — identical layout to BillingDialog */}
-        <div className="space-y-2">
-          <div className="flex gap-2">
-            {/* USB Thermal Print */}
-            {(isUSBAvailable || isElectronApp) && (
-              <div className="flex flex-1 gap-1">
-                <Button
-                  variant={usbPrinter ? 'default' : 'outline'}
-                  className={`flex-1 ${usbPrinter ? 'bg-primary' : ''}`}
-                  onClick={() => {
-                    if (usbPrinter) {
-                      handlePrint('usb');
-                    } else if (isElectronApp) {
-                      setShowDeviceList(!showDeviceList);
-                    } else {
-                      handleConnectUSB();
-                    }
-                  }}
-                  disabled={usbPrinting}
-                >
-                  <Usb className="w-4 h-4 mr-2" />
-                  {usbPrinter ? `Print (${usbPrinter.name.substring(0, 12)})` : 'Connect USB Printer'}
-                </Button>
-                {/* Change printer button — only visible when a printer is already connected */}
-                {usbPrinter && isElectronApp && (
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    title="Change printer"
-                    onClick={() => setShowDeviceList(!showDeviceList)}
-                  >
-                    <Settings2 className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-            )}
-            {/* Browser fallback */}
-            <Button
-              variant="outline"
-              className={(isUSBAvailable || isElectronApp) ? '' : 'flex-1'}
-              onClick={() => handlePrint('browser')}
-              disabled={thermalPrinting}
-            >
-              <Printer className="w-4 h-4 mr-2" />
-              Browser
-            </Button>
-            {/* Bluetooth */}
-            {isBluetoothAvailable && (
-              <Button
-                variant="outline"
-                className={connectedDevice ? 'border-green-500 text-green-600' : ''}
-                onClick={() => connectedDevice ? handlePrint('bluetooth') : undefined}
-                disabled={thermalPrinting}
-              >
-                <Bluetooth className="w-4 h-4 mr-2" />
-                BT
-              </Button>
-            )}
-          </div>
-
-          {/* Electron USB Device List — shown when no printer OR when changing printer */}
-          {isElectronApp && showDeviceList && (
-            <div className="border rounded-lg p-3 space-y-2 bg-muted/30">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">
-                  {usbPrinter ? 'Switch Printer' : 'Available USB Devices'}
-                </span>
-                <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="sm" onClick={handleRefreshDevices} disabled={loadingDevices}>
-                    <RefreshCw className={`w-3.5 h-3.5 ${loadingDevices ? 'animate-spin' : ''}`} />
-                  </Button>
-                  {usbPrinter && (
-                    <Button variant="ghost" size="sm" onClick={() => setShowDeviceList(false)}>
-                      Cancel
-                    </Button>
-                  )}
-                </div>
-              </div>
-              {usbPrinter && (
-                <p className="text-xs text-muted-foreground">
-                  Currently: <span className="font-medium text-foreground">{usbPrinter.name}</span> — select a different printer below
-                </p>
-              )}
-              {loadingDevices ? (
-                <p className="text-xs text-muted-foreground">Scanning USB devices...</p>
-              ) : availableDevices.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No USB devices found. Make sure the printer is plugged in and try refreshing.</p>
-              ) : (
-                <div className="space-y-1 max-h-40 overflow-y-auto">
-                  {availableDevices.map((device, i) => (
-                    <button
-                      key={`${device.vendorId}-${device.productId}-${i}`}
-                      className={`w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors flex items-center justify-between ${
-                        usbPrinter?.vendorId === device.vendorId && usbPrinter?.productId === device.productId
-                          ? 'bg-accent/60 font-medium'
-                          : ''
-                      }`}
-                      onClick={() => handleConnectUSB(device.vendorId, device.productId)}
-                    >
-                      <span className="truncate flex items-center gap-2">
-                        {usbPrinter?.vendorId === device.vendorId && usbPrinter?.productId === device.productId && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-                        )}
-                        {device.name}
-                      </span>
-                      <span className="text-xs opacity-60 ml-2 shrink-0">
-                        {device.vendorId.toString(16).padStart(4, '0')}:{device.productId.toString(16).padStart(4, '0')}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Windows Printer Selector - show all available printers */}
-          {isElectronApp && usbPrinter && windowsPrinters.length > 0 && (
-            <div className="border rounded-lg p-3 space-y-2 bg-muted/30">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">Windows Printer</Label>
-                <span className="text-xs text-muted-foreground">
-                  {windowsPrinters.length} printer{windowsPrinters.length > 1 ? 's' : ''} available
-                </span>
-              </div>
-              <select
-                className="w-full px-3 py-2 rounded-md border text-sm bg-background"
-                value={selectedWindowsPrinter}
-                onChange={async (e) => {
-                  const newPrinter = e.target.value;
-                  setSelectedWindowsPrinter(newPrinter);
-                  try {
-                    const api = (window as any).electronAPI?.printer;
-                    if (api?.switchWindowsPrinter) {
-                      const result = await api.switchWindowsPrinter(newPrinter);
-                      if (result.success) {
-                        console.log('[ReportPrintDialog] Switched to:', newPrinter);
-                      }
-                    }
-                  } catch (err: any) {
-                    console.error('[ReportPrintDialog] Switch printer error:', err);
-                  }
-                }}
-              >
-                {windowsPrinters.map((p) => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">
-                Select any Windows printer for printing.
-              </p>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export default function Reports() {
   const { currentRestaurant } = useRestaurant();
   const { toast } = useToast();
@@ -598,35 +138,24 @@ export default function Reports() {
   const [orderToEdit, setOrderToEdit] = useState<Order | null>(null);
   const [editPaymentMethod, setEditPaymentMethod] = useState<string>('');
   const [editStatus, setEditStatus] = useState<string>('');
-  const [billingDialogOpen, setBillingDialogOpen] = useState(false);
-  const [billingOrder, setBillingOrder] = useState<Order | null>(null);
-  const [billEditDialogOpen, setBillEditDialogOpen] = useState(false);
   const ordersPerPage = 10;
 
-  // Thermal printer hooks
-  const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing: thermalPrinting } = useThermalPrinter();
-  const { connectedPrinter: usbPrinter, printing: usbPrinting, isAvailable: isUSBAvailable, connectPrinter: connectUSB, printBill: printUSB } = useUSBPrinter();
-
-  // Delete order handler - offline-first
+  // Delete order handler
   const handleDeleteOrder = async () => {
     if (!orderToDelete) return;
     
     try {
-      // Delete order items first (local SQLite)
-      const db = getDataClient();
-      if (db) {
-        const itemsRes = await db.query('order_items', { order_id: orderToDelete.id });
-        for (const item of (itemsRes.data || [])) {
-          await offlineDelete('order_items', item.id, async () => {
-            return await supabase.from('order_items').delete().eq('id', item.id);
-          });
-        }
-      }
+      // First delete order items
+      await supabase
+        .from('order_items')
+        .delete()
+        .eq('order_id', orderToDelete.id);
       
       // Then delete the order
-      const { error } = await offlineDelete('orders', orderToDelete.id, async () => {
-        return await supabase.from('orders').delete().eq('id', orderToDelete.id);
-      });
+      const { error } = await supabase
+        .from('orders')
+        .delete()
+        .eq('id', orderToDelete.id);
       
       if (error) throw error;
       
@@ -640,28 +169,18 @@ export default function Reports() {
     }
   };
 
-  // Edit order handler - offline-first
+  // Edit order handler
   const handleEditOrder = async () => {
     if (!orderToEdit) return;
     
     try {
-      const { error } = await offlineMutate('orders', {
-        id: orderToEdit.id,
-        payment_method: editPaymentMethod || null,
-        status: editStatus as OrderStatus,
-        restaurant_id: orderToEdit.table_id ? undefined : currentRestaurant?.id
-      }, async () => {
-        const res = await supabase
-          .from('orders')
-          .update({
-            payment_method: editPaymentMethod || null,
-            status: editStatus as OrderStatus,
-          })
-          .eq('id', orderToEdit.id)
-          .select()
-          .single();
-        return res;
-      });
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          payment_method: editPaymentMethod || null,
+          status: editStatus as OrderStatus,
+        })
+        .eq('id', orderToEdit.id);
       
       if (error) throw error;
       
@@ -691,25 +210,6 @@ export default function Reports() {
     setEditDialogOpen(true);
   };
 
-  const openBillingDialog = (order: Order) => {
-    setBillingOrder(order);
-    setBillingDialogOpen(true);
-  };
-
-  // GST-inclusive grand total for an order. Uses the saved final_amount when
-  // present (it already includes discount + GST); otherwise computes it from
-  // the subtotal, any saved discount, and the current GST rates.
-  const orderGrandTotal = (order: any): number => {
-    const finalAmt = Number(order.final_amount) || 0;
-    if (finalAmt > 0) return finalAmt;
-    const sub = Number(order.total_amount) || 0;
-    const disc = Number(order.discount_amount) || 0;
-    const net = Math.max(sub - disc, 0);
-    const cgst = (net * (currentRestaurant?.cgst_percentage || 0)) / 100;
-    const sgst = (net * (currentRestaurant?.sgst_percentage || 0)) / 100;
-    return net + cgst + sgst;
-  };
-
   // Calculate date range
   const getDateRange = useMemo(() => {
     const now = new Date();
@@ -732,217 +232,68 @@ export default function Reports() {
     }
   }, [dateRange, customDateFrom, customDateTo]);
 
-  // Fetch orders from local SQLite (offline-first)
-  const fetchOrders = useCallback(async () => {
-    if (!currentRestaurant) return;
-    setLoading(true);
+  // Fetch orders
+  useEffect(() => {
+    async function fetchOrders() {
+      if (!currentRestaurant) return;
+      setLoading(true);
 
-    try {
-      const result = await offlineQuery(
-        async () => {
-          const { data, error } = await supabase
-            .from('orders')
-            .select(`
-              id,
-              status,
-              total_amount,
-              created_at,
-              notes,
-              table_id,
-              payment_method,
-              restaurant_id,
-              order_items (
-                id,
-                quantity,
-                unit_price,
-                menu_item:menu_items (
-                  name,
-                  food_type
-                )
-              )
-            `)
-            .eq('restaurant_id', currentRestaurant.id)
-            .gte('created_at', getDateRange.from.toISOString())
-            .lte('created_at', getDateRange.to.toISOString())
-            .order('created_at', { ascending: false });
-          
-          if (error) throw error;
-          return { data, error };
-        },
-        { table: 'orders', filters: { restaurant_id: currentRestaurant.id } }
-      );
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          status,
+          total_amount,
+          created_at,
+          notes,
+          table_id,
+          payment_method,
+          order_items (
+            id,
+            quantity,
+            unit_price,
+            menu_item:menu_items (
+              name,
+              food_type
+            )
+          )
+        `)
+        .eq('restaurant_id', currentRestaurant.id)
+        .gte('created_at', getDateRange.from.toISOString())
+        .lte('created_at', getDateRange.to.toISOString())
+        .order('created_at', { ascending: false });
 
-      if (result.error && !result.fromCache) throw result.error;
-
-      let ordersData: any[] = [];
-
-      if (result.fromCache) {
-        // From SQLite cache - need to filter by date and assemble data
-        // Use localQuery which is LAN-aware
-        const { localQuery } = await import('@/services/localDataService');
-        
-        // Fetch all orders for this restaurant from local/LAN
-        const ordersRes = await localQuery('orders', { restaurant_id: currentRestaurant.id });
-        const rawOrders = (ordersRes.data || []) as any[];
-          
-          // Filter by date range
-          const filteredOrders = rawOrders.filter(order => {
-            const orderDate = new Date(order.created_at);
-            return orderDate >= getDateRange.from && orderDate <= getDateRange.to;
-          });
-
-        // Fetch related data using localQuery (LAN-aware)
-          const [itemsRes, tablesRes, floorsRes, menuRes] = await Promise.all([
-            localQuery('order_items'),
-            localQuery('tables'),
-            localQuery('floors'),
-            localQuery('menu_items')
-          ]);
-
-          const allItems = itemsRes.data || [];
-          const allTables = tablesRes.data || [];
-          const allFloors = floorsRes.data || [];
-          const allMenuItems = menuRes.data || [];
-
-          // Assemble orders with related data
-          ordersData = filteredOrders.map(order => {
-            const orderItems = allItems
-              .filter((item: any) => item.order_id === order.id)
-              .map((item: any) => {
-                const menuItem = allMenuItems.find((m: any) => m.id === item.menu_item_id);
-                return {
-                  ...item,
-                  menu_item: menuItem ? {
-                    name: menuItem.name,
-                    food_type: menuItem.food_type
-                  } : null
-                };
-              });
-
-            const table = order.table_id 
-              ? allTables.find((t: any) => t.id === order.table_id)
-              : null;
-            
-            const floor = table 
-              ? allFloors.find((f: any) => f.id === table.floor_id)
-              : null;
-
-            return {
-              ...order,
-              order_items: orderItems,
-              table: table ? { 
-                table_number: table.table_number,
-                floor: floor ? { name: floor.name } : { name: 'Unknown' }
-              } : null
-            };
-          });
-      } else {
-        // From Supabase (cloud)
-        ordersData = result.data || [];
-        
-        // Fetch table and floor info separately for cloud data
-        const tableIds = ordersData.filter((o: any) => o.table_id).map((o: any) => o.table_id);
-        let tablesMap: Record<string, { table_number: string; floor_id: string }> = {};
-        let floorsMap: Record<string, { name: string }> = {};
+      if (!error && data) {
+        // Fetch table info separately
+        const tableIds = data.filter(o => o.table_id).map(o => o.table_id);
+        let tablesMap: Record<string, { table_number: string }> = {};
         
         if (tableIds.length > 0) {
           const { data: tables } = await supabase
             .from('tables')
-            .select('id, table_number, floor_id')
+            .select('id, table_number')
             .in('id', tableIds);
           
           if (tables) {
             tablesMap = tables.reduce((acc, t) => ({ ...acc, [t.id]: t }), {});
-            
-            // Fetch floors for these tables
-            const floorIds = tables.filter(t => t.floor_id).map(t => t.floor_id);
-            if (floorIds.length > 0) {
-              const { data: floors } = await supabase
-                .from('floors')
-                .select('id, name')
-                .in('id', floorIds);
-              
-              if (floors) {
-                floorsMap = floors.reduce((acc, f) => ({ ...acc, [f.id]: f }), {});
-              }
-            }
           }
         }
 
-        ordersData = ordersData.map((order: any) => {
-          const table = order.table_id ? tablesMap[order.table_id] : null;
-          const floor = table?.floor_id ? floorsMap[table.floor_id] : null;
-          return {
-            ...order,
-            table: table ? { 
-              table_number: table.table_number,
-              floor: floor ? { name: floor.name } : { name: 'Unknown' }
-            } : null
-          };
-        });
+        setOrders(data.map(order => ({
+          ...order,
+          status: order.status as OrderStatus,
+          table: order.table_id ? tablesMap[order.table_id] : null,
+          order_items: order.order_items.map(item => ({
+            ...item,
+            menu_item: item.menu_item as { name: string; food_type: string } | null
+          }))
+        })));
       }
-
-      // Sort newest-first explicitly. The DB returns rows in different orders
-      // depending on source (local = updated_at DESC, LAN = insertion order), so
-      // without this the history list would differ between the server and a
-      // client even though it's the same set of orders.
-      ordersData.sort((a: any, b: any) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-
-      setOrders(ordersData.map(order => ({
-        ...order,
-        status: order.status as OrderStatus,
-        order_items: order.order_items?.map((item: any) => ({
-          ...item,
-          menu_item: item.menu_item as { name: string; food_type: string } | null
-        })) || []
-      })));
-    } catch (error: any) {
-      console.error('Error fetching orders:', error);
-      toast({ title: 'Failed to fetch orders', description: error.message, variant: 'destructive' });
-    } finally {
       setLoading(false);
     }
-  }, [currentRestaurant, getDateRange, toast]);
 
-  useEffect(() => {
     fetchOrders();
-  }, [fetchOrders]);
-
-  // Refresh data when page becomes visible
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('[Reports] Page visible, refreshing data...');
-        fetchOrders();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [fetchOrders]);
-
-  // Keep the order history in sync across stations: refresh instantly when the
-  // LAN server pushes an order/item change, plus a slower poll as a safety net.
-  // Without this a client's history is just a one-time snapshot.
-  useEffect(() => {
-    const interval = setInterval(() => { fetchOrders(); }, 15000);
-
-    let debounce: any;
-    const lan = (window as any).electronAPI?.lan;
-    const unsub = lan?.onRecordChanged?.((_e: any, payload: any) => {
-      if (payload?.table && !['orders', 'order_items'].includes(payload.table)) return;
-      clearTimeout(debounce);
-      debounce = setTimeout(() => fetchOrders(), 800);
-    });
-
-    return () => {
-      clearInterval(interval);
-      clearTimeout(debounce);
-      unsub?.();
-    };
-  }, [fetchOrders]);
+  }, [currentRestaurant, getDateRange]);
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -952,13 +303,6 @@ export default function Reports() {
     
     const totalRevenue = completed.reduce((sum, o) => sum + Number(o.total_amount), 0);
     const avgOrderValue = completed.length > 0 ? totalRevenue / completed.length : 0;
-
-    // GST totals derived from restaurant settings
-    const cgstPct = currentRestaurant?.cgst_percentage ?? 0;
-    const sgstPct = currentRestaurant?.sgst_percentage ?? 0;
-    const cgstTotal = (totalRevenue * cgstPct) / 100;
-    const sgstTotal = (totalRevenue * sgstPct) / 100;
-    const grandTotal = totalRevenue + cgstTotal + sgstTotal;
     
     // Payment method breakdown
     const cashRevenue = completed
@@ -981,11 +325,8 @@ export default function Reports() {
       cashRevenue,
       onlineRevenue,
       unpaidRevenue,
-      cgstTotal,
-      sgstTotal,
-      grandTotal,
     };
-  }, [orders, currentRestaurant]);
+  }, [orders]);
 
   // Popular items
   const popularItems = useMemo(() => {
@@ -1264,163 +605,6 @@ export default function Reports() {
     }
   }, [currentRestaurant, orders, filteredOrders, stats, popularItems, getDateRange, toast]);
 
-  // Open report print dialog
-  const [reportPrintDialogOpen, setReportPrintDialogOpen] = useState(false);
-
-  const openReportPrintDialog = useCallback(() => {
-    if (!currentRestaurant) {
-      toast({ title: "No restaurant selected", variant: "destructive" });
-      return;
-    }
-    setReportPrintDialogOpen(true);
-  }, [currentRestaurant, toast]);
-
-  // Print report summary to thermal printer
-  const printReportSummary = useCallback(async (printerType: 'usb' | 'bluetooth' | 'browser' = 'browser') => {
-    if (!currentRestaurant) return;
-
-    const dateRangeLabel = dateRange === 'today' ? 'Today' : 
-                          dateRange === 'yesterday' ? 'Yesterday' :
-                          dateRange === 'week' ? 'This Week' :
-                          dateRange === 'month' ? 'This Month' : 'Custom Range';
-
-    // Create report items for BillData format
-    const reportItems = [
-      { name: `Period: ${dateRangeLabel}`, quantity: 1, price: 0 },
-      { name: '--- REVENUE SUMMARY ---', quantity: 1, price: 0 },
-      { name: 'Total Revenue', quantity: 1, price: stats.totalRevenue },
-      { name: 'Completed Orders', quantity: stats.completedOrders, price: 0 },
-      { name: `Average Order Value`, quantity: 1, price: Math.round(stats.avgOrderValue) },
-      { name: '--- PAYMENT BREAKDOWN ---', quantity: 1, price: 0 },
-      { name: 'Cash Payments', quantity: 1, price: stats.cashRevenue },
-      { name: 'Online Payments', quantity: 1, price: stats.onlineRevenue },
-      { name: '--- TOP SELLING ITEMS ---', quantity: 1, price: 0 },
-      ...popularItems.slice(0, 5).map(item => ({
-        name: item.name,
-        quantity: item.quantity,
-        price: item.revenue
-      })),
-    ];
-
-    const reportBillData = {
-      restaurantName: currentRestaurant.name,
-      restaurantAddress: currentRestaurant.address,
-      restaurantPhone: currentRestaurant.phone,
-      tableNumber: 'REPORT',
-      items: reportItems,
-      subtotal: stats.totalRevenue,
-      total: stats.grandTotal,
-      cgstPercentage: currentRestaurant.cgst_percentage ?? 0,
-      sgstPercentage: currentRestaurant.sgst_percentage ?? 0,
-      cgstAmount: stats.cgstTotal,
-      sgstAmount: stats.sgstTotal,
-    };
-
-    try {
-      if (printerType === 'usb' && isUSBAvailable) {
-        // Auto-connect if not yet connected
-        if (!usbPrinter) {
-          await connectUSB();
-        }
-        await printUSB(reportBillData);
-        toast({ title: "Report printed via USB" });
-        setReportPrintDialogOpen(false);
-        return;
-      }
-
-      if (printerType === 'bluetooth' && isBluetoothAvailable && connectedDevice) {
-        await printThermal(reportBillData);
-        toast({ title: "Report printed via Bluetooth" });
-        setReportPrintDialogOpen(false);
-        return;
-      }
-
-      if (printerType === 'browser') {
-        // Fallback to browser print with formatted text
-        const cgstPct = currentRestaurant.cgst_percentage ?? 0;
-        const sgstPct = currentRestaurant.sgst_percentage ?? 0;
-        const reportLines = [
-          '',
-          '========================================',
-          '         SALES REPORT SUMMARY           ',
-          '========================================',
-          '',
-          `Restaurant: ${currentRestaurant.name}`,
-          `Period: ${dateRangeLabel}`,
-          `Date: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`,
-          '',
-          '----------------------------------------',
-          '           REVENUE SUMMARY              ',
-          '----------------------------------------',
-          '',
-          `Subtotal (excl. GST): ₹${stats.totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-          `Completed Orders:  ${stats.completedOrders}`,
-          `Average Order:     ₹${Math.round(stats.avgOrderValue).toLocaleString()}`,
-          ...(stats.cgstTotal > 0 ? [`CGST (${cgstPct}%):   ₹${stats.cgstTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`] : []),
-          ...(stats.sgstTotal > 0 ? [`SGST (${sgstPct}%):   ₹${stats.sgstTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`] : []),
-          ...(stats.cgstTotal > 0 || stats.sgstTotal > 0 ? [
-            '----------------------------------------',
-            `Grand Total (incl. GST): ₹${stats.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-          ] : []),
-          '',
-          '----------------------------------------',
-          '         PAYMENT BREAKDOWN              ',
-          '----------------------------------------',
-          '',
-          `Cash Payments:     ₹${stats.cashRevenue.toLocaleString()}`,
-          `Online Payments:   ₹${stats.onlineRevenue.toLocaleString()}`,
-          '',
-          '----------------------------------------',
-          '         TOP SELLING ITEMS              ',
-          '----------------------------------------',
-          '',
-          ...popularItems.slice(0, 5).map((item, idx) => 
-            `${idx + 1}. ${item.name}`
-          ),
-          '',
-          '========================================',
-          '         End of Report                  ',
-          '========================================',
-          '',
-          '',
-          '',
-        ];
-        const reportText = reportLines.join('\n');
-        
-        const printWindow = window.open('', '_blank', 'width=300,height=600');
-        if (printWindow) {
-          printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>Sales Report</title>
-              <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body { font-family: 'Courier New', monospace; font-size: 12px; width: 80mm; padding: 5mm; }
-                pre { white-space: pre-wrap; word-wrap: break-word; }
-              </style>
-            </head>
-            <body>
-              <pre>${reportText}</pre>
-            </body>
-            </html>
-          `);
-          printWindow.document.close();
-          printWindow.focus();
-          setTimeout(() => {
-            printWindow.print();
-            printWindow.close();
-          }, 250);
-          toast({ title: "Report sent to browser print" });
-          setReportPrintDialogOpen(false);
-        }
-      }
-    } catch (error: any) {
-      console.error('Print error:', error);
-      toast({ title: "Print failed", description: error.message, variant: "destructive" });
-    }
-  }, [currentRestaurant, dateRange, stats, popularItems, usbPrinter, isUSBAvailable, connectUSB, connectedDevice, isBluetoothAvailable, printUSB, printThermal, toast]);
-
   if (!currentRestaurant) {
     return (
       <DashboardLayout>
@@ -1441,18 +625,8 @@ export default function Reports() {
             <p className="text-muted-foreground mt-1">Track your restaurant performance</p>
           </div>
           
-          {/* Date Range, Export & Print */}
+          {/* Date Range & Export */}
           <div className="flex items-center gap-2 flex-wrap">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={openReportPrintDialog}
-              disabled={thermalPrinting || usbPrinting || loading}
-              title="Print report summary to thermal printer"
-            >
-              <Printer className="w-4 h-4 mr-2" />
-              Print Report
-            </Button>
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" disabled={exporting || loading}>
@@ -1556,15 +730,8 @@ export default function Reports() {
                       <IndianRupee className="w-6 h-6 text-primary" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">
-                        {stats.cgstTotal > 0 || stats.sgstTotal > 0 ? 'Subtotal (excl. GST)' : 'Total Revenue'}
-                      </p>
+                      <p className="text-sm text-muted-foreground">Total Revenue</p>
                       <p className="text-2xl font-bold text-foreground">₹{stats.totalRevenue.toLocaleString()}</p>
-                      {(stats.cgstTotal > 0 || stats.sgstTotal > 0) && (
-                        <p className="text-xs text-primary font-semibold mt-0.5">
-                          Grand Total: ₹{stats.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </p>
-                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -1612,43 +779,6 @@ export default function Reports() {
                 </CardContent>
               </Card>
             </div>
-
-            {/* GST Breakdown — only shown when GST is configured */}
-            {(stats.cgstTotal > 0 || stats.sgstTotal > 0) && (
-              <Card className="glass-card">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <IndianRupee className="w-4 h-4 text-primary" />
-                    GST Breakdown
-                  </CardTitle>
-                  <CardDescription>Tax collected on revenue for the selected period</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <div className="p-3 rounded-lg bg-muted/50 border border-border">
-                      <p className="text-xs text-muted-foreground mb-1">Subtotal (excl. GST)</p>
-                      <p className="text-lg font-bold text-foreground">₹{stats.totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                    </div>
-                    {stats.cgstTotal > 0 && (
-                      <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
-                        <p className="text-xs text-muted-foreground mb-1">CGST ({currentRestaurant?.cgst_percentage}%)</p>
-                        <p className="text-lg font-bold text-foreground">₹{stats.cgstTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                      </div>
-                    )}
-                    {stats.sgstTotal > 0 && (
-                      <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
-                        <p className="text-xs text-muted-foreground mb-1">SGST ({currentRestaurant?.sgst_percentage}%)</p>
-                        <p className="text-lg font-bold text-foreground">₹{stats.sgstTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                      </div>
-                    )}
-                    <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
-                      <p className="text-xs text-muted-foreground mb-1">Grand Total (incl. GST)</p>
-                      <p className="text-lg font-bold text-primary">₹{stats.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
             {/* Payment Method Breakdown */}
             <Card className="glass-card">
@@ -1982,14 +1112,85 @@ export default function Reports() {
                             </div>
                             <div className="flex items-center gap-3">
                               <p className="text-lg font-bold text-primary">
-                                ₹{orderGrandTotal(order).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                ₹{Number(order.total_amount).toLocaleString()}
                               </p>
                               <Button
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8"
-                                title="View Bill / Print"
-                                onClick={() => openBillingDialog(order)}
+                                title="Print Receipt (Thermal)"
+                                onClick={() => {
+                                  const printWindow = window.open('', '_blank', 'width=300,height=600');
+                                  if (!printWindow) {
+                                    toast({ title: 'Please allow popups to print', variant: 'destructive' });
+                                    return;
+                                  }
+                                  
+                                  const itemsHtml = order.order_items.map(item => `
+                                    <tr>
+                                      <td style="text-align:left;padding:2px 0;">${item.menu_item?.name || 'Unknown'}</td>
+                                      <td style="text-align:center;padding:2px 4px;">${item.quantity}</td>
+                                      <td style="text-align:right;padding:2px 0;">₹${(item.quantity * Number(item.unit_price)).toLocaleString()}</td>
+                                    </tr>
+                                  `).join('');
+                                  
+                                  printWindow.document.write(`
+                                    <!DOCTYPE html>
+                                    <html>
+                                    <head>
+                                      <title>Receipt</title>
+                                      <style>
+                                        * { margin: 0; padding: 0; box-sizing: border-box; }
+                                        body { font-family: 'Courier New', monospace; font-size: 12px; width: 80mm; padding: 5mm; }
+                                        .header { text-align: center; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 10px; }
+                                        .header h1 { font-size: 16px; margin-bottom: 5px; }
+                                        .info { margin-bottom: 10px; }
+                                        .info p { margin: 2px 0; }
+                                        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+                                        .divider { border-top: 1px dashed #000; margin: 10px 0; }
+                                        .total { font-weight: bold; font-size: 14px; text-align: right; }
+                                        .footer { text-align: center; margin-top: 15px; font-size: 10px; }
+                                        @media print { body { width: 80mm; } }
+                                      </style>
+                                    </head>
+                                    <body>
+                                      <div class="header">
+                                        <h1>${currentRestaurant?.name || 'Restaurant'}</h1>
+                                        ${currentRestaurant?.address ? `<p>${currentRestaurant.address}</p>` : ''}
+                                        ${currentRestaurant?.phone ? `<p>Tel: ${currentRestaurant.phone}</p>` : ''}
+                                      </div>
+                                      <div class="info">
+                                        <p><strong>Order #${order.id.slice(0, 8).toUpperCase()}</strong></p>
+                                        <p>Date: ${format(parseISO(order.created_at), 'dd/MM/yyyy HH:mm')}</p>
+                                        ${order.table ? `<p>Table: ${order.table.table_number}</p>` : ''}
+                                      </div>
+                                      <div class="divider"></div>
+                                      <table>
+                                        <thead>
+                                          <tr>
+                                            <th style="text-align:left;">Item</th>
+                                            <th style="text-align:center;">Qty</th>
+                                            <th style="text-align:right;">Amt</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>${itemsHtml}</tbody>
+                                      </table>
+                                      <div class="divider"></div>
+                                      <p class="total">TOTAL: ₹${Number(order.total_amount).toLocaleString()}</p>
+                                      <div class="footer">
+                                        <p>Thank you for dining with us!</p>
+                                        ${currentRestaurant?.gstin ? `<p>GSTIN: ${currentRestaurant.gstin}</p>` : ''}
+                                      </div>
+                                    </body>
+                                    </html>
+                                  `);
+                                  printWindow.document.close();
+                                  printWindow.focus();
+                                  setTimeout(() => {
+                                    printWindow.print();
+                                    printWindow.close();
+                                  }, 250);
+                                }}
                               >
                                 <Printer className="w-4 h-4" />
                               </Button>
@@ -2135,86 +1336,6 @@ export default function Reports() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
-        {/* Billing Dialog */}
-        <BillingDialog
-          open={billingDialogOpen}
-          onOpenChange={setBillingDialogOpen}
-          order={billingOrder}
-          restaurantName={currentRestaurant?.name}
-          restaurantAddress={currentRestaurant?.address}
-          restaurantPhone={currentRestaurant?.phone}
-          restaurantGstin={currentRestaurant?.gstin}
-          restaurantCgstPercentage={currentRestaurant?.cgst_percentage || 0}
-          restaurantSgstPercentage={currentRestaurant?.sgst_percentage || 0}
-          showQrCode={currentRestaurant?.print_qr_on_bill !== false}
-          paymentQrContent={(currentRestaurant as any)?.payment_qr_content}
-          onPaymentComplete={async (paymentMethod, billing) => {
-            if (!billingOrder) return;
-
-            // Persist the discount/GST breakdown so the bill stays consistent.
-            const billingFields = billing
-              ? {
-                  discount_amount: billing.discountAmount,
-                  cgst_amount: billing.cgstAmount,
-                  sgst_amount: billing.sgstAmount,
-                  final_amount: billing.finalAmount,
-                }
-              : {};
-
-            // Update the order in local state
-            setOrders(prev => prev.map(o =>
-              o.id === billingOrder.id
-                ? { ...o, status: 'served' as OrderStatus, payment_method: paymentMethod, ...billingFields }
-                : o
-            ));
-
-            // Update in SQLite/Supabase
-            try {
-              await offlineMutate('orders', {
-                id: billingOrder.id,
-                status: 'served',
-                payment_method: paymentMethod,
-                payment_status: 'paid',
-                ...billingFields,
-                restaurant_id: (billingOrder as any).restaurant_id || currentRestaurant?.id
-              }, async () => {
-                const res = await supabase
-                  .from('orders')
-                  .update({ status: 'served', payment_method: paymentMethod })
-                  .eq('id', billingOrder.id)
-                  .select()
-                  .single();
-                return res;
-              });
-              
-              // Free up the table
-              if (billingOrder.table_id) {
-                await offlineMutate('tables', { id: billingOrder.table_id, is_occupied: false }, async () => {
-                  const res = await supabase.from('tables').update({ is_occupied: false }).eq('id', billingOrder.table_id).select().single();
-                  return res;
-                });
-              }
-              
-              toast({ title: `Payment recorded: ${paymentMethod.toUpperCase()}` });
-            } catch (error: any) {
-              toast({ title: 'Failed to record payment', description: error.message, variant: 'destructive' });
-            }
-            
-            setBillingDialogOpen(false);
-            setBillingOrder(null);
-          }}
-        />
-
-        {/* Report Print Dialog */}
-        <ReportPrintDialogInner
-          open={reportPrintDialogOpen}
-          onOpenChange={setReportPrintDialogOpen}
-          currentRestaurant={currentRestaurant}
-          dateRange={dateRange}
-          stats={stats}
-          popularItems={popularItems}
-        />
       </div>
     </DashboardLayout>
   );

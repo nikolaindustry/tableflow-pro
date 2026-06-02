@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { offlineQuery } from '@/services/offlineDataService';
+import { supabase } from '@/integrations/supabase/client';
 
 export function useActiveOrderCount(restaurantId: string | undefined) {
   const [count, setCount] = useState(0);
@@ -11,28 +11,39 @@ export function useActiveOrderCount(restaurantId: string | undefined) {
     }
 
     const fetchCount = async () => {
-      const result = await offlineQuery(
-        async () => ({ data: null, error: null }), // No Supabase fallback
-        { table: 'orders', filters: { restaurant_id: restaurantId } }
-      );
+      const { count: orderCount, error } = await supabase
+        .from('orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('restaurant_id', restaurantId)
+        .in('status', ['pending', 'cooking']);
 
-      // Count from local data
-      const orders = (result.data || []) as any[];
-      const activeCount = orders.filter(o => 
-        o.status === 'pending' || 
-        o.status === 'cooking' ||
-        o.status === 'confirmed' ||
-        o.status === 'preparing' ||
-        o.status === 'ready'
-      ).length;
-      setCount(activeCount);
+      if (!error && orderCount !== null) {
+        setCount(orderCount);
+      }
     };
 
     fetchCount();
 
-    // Poll for updates every 5 seconds (no realtime in local mode)
-    const interval = setInterval(fetchCount, 5000);
-    return () => clearInterval(interval);
+    // Real-time subscription
+    const channel = supabase
+      .channel('order-count-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+          filter: `restaurant_id=eq.${restaurantId}`,
+        },
+        () => {
+          fetchCount();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [restaurantId]);
 
   return count;

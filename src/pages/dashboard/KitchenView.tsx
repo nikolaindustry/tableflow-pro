@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
-import { offlineQuery, offlineMutate, isElectron } from '@/services/offlineDataService';
-import { getDataClient } from '@/services/localDataService';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -107,82 +106,19 @@ export default function KitchenView() {
     if (!currentRestaurant) return;
 
     try {
-      const result = await offlineQuery(
-        async () => {
-          const res = await supabase
-            .from('orders')
-            .select(`
-              *,
-              table:tables(table_number, floor:floors(name)),
-              order_items(*, menu_item:menu_items(name, food_type, preparation_time))
-            `)
-            .eq('restaurant_id', currentRestaurant.id)
-            .in('status', ['pending', 'cooking', 'ready'])
-            .order('created_at', { ascending: true });
-          return res;
-        },
-        { table: 'orders', filters: { restaurant_id: currentRestaurant.id } }
-      );
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          *,
+          table:tables(table_number, floor:floors(name)),
+          order_items(*, menu_item:menu_items(name, food_type, preparation_time))
+        `)
+        .eq('restaurant_id', currentRestaurant.id)
+        .in('status', ['pending', 'cooking', 'ready'])
+        .order('created_at', { ascending: true });
 
-      if (result.error && !result.fromCache) throw result.error;
-
-      if (result.fromCache) {
-        // From cache: flat orders, need to assemble with order_items, menu_items, and tables
-        const rawOrders = (result.data || []) as any[];
-        const activeOrders = rawOrders.filter(o => ['pending', 'cooking', 'ready'].includes(o.status));
-        const db = getDataClient();
-        const assembled: Order[] = [];
-        
-        // Fetch all menu_items, tables, and floors from local SQLite for joining
-        let localMenuItems: any[] = [];
-        let localTables: any[] = [];
-        let localFloors: any[] = [];
-        if (db) {
-          const menuRes = await db.query('menu_items');
-          localMenuItems = menuRes.data || [];
-          const tablesRes = await db.query('tables');
-          localTables = tablesRes.data || [];
-          const floorsRes = await db.query('floors');
-          localFloors = floorsRes.data || [];
-        }
-        
-        for (const order of activeOrders) {
-          let orderItems: any[] = [];
-          if (db) {
-            const itemsRes = await db.query('order_items', { order_id: order.id });
-            // Join with menu_items to get the name and food_type
-            orderItems = (itemsRes.data || []).map((item: any) => {
-              const menuItem = localMenuItems.find((m: any) => m.id === item.menu_item_id);
-              return {
-                ...item,
-                menu_item: menuItem ? {
-                  name: menuItem.name,
-                  food_type: menuItem.food_type,
-                  preparation_time: menuItem.preparation_time
-                } : null
-              };
-            });
-          }
-          
-          // Join with tables and floors to get table info
-          let tableInfo = null;
-          if (order.table_id) {
-            const table = localTables.find((t: any) => t.id === order.table_id);
-            if (table) {
-              const floor = localFloors.find((f: any) => f.id === table.floor_id);
-              tableInfo = {
-                table_number: table.table_number,
-                floor: floor ? { name: floor.name } : { name: 'Unknown' }
-              };
-            }
-          }
-          
-          assembled.push({ ...order, order_items: orderItems, table: tableInfo } as any);
-        }
-        setOrders(assembled);
-      } else {
-        setOrders((result.data || []) as Order[]);
-      }
+      if (error) throw error;
+      setOrders(data || []);
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
@@ -194,148 +130,115 @@ export default function KitchenView() {
     fetchOrders();
   }, [currentRestaurant]);
 
-  // Refresh data when page becomes visible (e.g., after navigating back)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('[KitchenView] Page visible, refreshing data...');
-        fetchOrders();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [fetchOrders]);
-
-  // Poll for kitchen updates every 5 seconds (safety net / local mode)
+  // Real-time subscription
   useEffect(() => {
     if (!currentRestaurant) return;
 
-    const interval = setInterval(fetchOrders, 5000);
-    return () => clearInterval(interval);
-  }, [currentRestaurant, fetchOrders]);
-
-  // Real-time: refresh instantly when the LAN server pushes a change instead of
-  // waiting for the next poll. Safe even if not in LAN mode (no-op then).
-  useEffect(() => {
-    const lan = (window as any).electronAPI?.lan;
-    if (!lan?.onRecordChanged) return;
-
-    const unsubRecord = lan.onRecordChanged((_event: any, payload: any) => {
-      if (!payload?.table || ['orders', 'order_items'].includes(payload.table)) {
-        fetchOrders();
-      }
-    });
-    const unsubStatus = lan.onOrderStatusChanged?.(() => fetchOrders());
-
-    return () => {
-      unsubRecord?.();
-      unsubStatus?.();
-    };
-  }, [fetchOrders]);
-
-  const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
-    // Optimistic UI: update local state immediately
-    setOrders(prev => prev.map(order => {
-      if (order.id !== orderId) return order;
-      return {
-        ...order,
-        status: newStatus,
-        order_items: order.order_items.map(item => {
-          if (newStatus === 'cooking' && item.status === 'pending') return { ...item, status: 'cooking' as OrderStatus };
-          if (newStatus === 'ready' && item.status !== 'ready') return { ...item, status: 'ready' as OrderStatus };
-          if (newStatus === 'served') return { ...item, status: 'served' as OrderStatus };
-          return item;
-        })
-      };
-    }));
-
-    try {
-      const order = orders.find((o) => o.id === orderId);
-      await offlineMutate('orders', { 
-        id: orderId, 
-        status: newStatus,
-        restaurant_id: currentRestaurant?.id,
-      }, async () => {
-        const res = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId).select().single();
-        return res;
-      });
-
-      // Also update order items in SQLite
-      const db = getDataClient();
-      if (db) {
-        const itemsRes = await db.query('order_items', { order_id: orderId });
-        for (const item of (itemsRes.data || [])) {
-          let shouldUpdate = false;
-          if (newStatus === 'cooking' && item.status === 'pending') shouldUpdate = true;
-          else if (newStatus === 'ready' && item.status !== 'ready') shouldUpdate = true;
+    const channel = supabase
+      .channel('kitchen-orders')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+          filter: `restaurant_id=eq.${currentRestaurant.id}`,
+        },
+        (payload) => {
+          console.log('Order change:', payload);
+          fetchOrders();
           
-          if (shouldUpdate) {
-            await offlineMutate('order_items', { 
-              id: item.id, 
-              status: newStatus,
-              order_id: item.order_id,
-              menu_item_id: item.menu_item_id,
-              unit_price: item.unit_price,
-              quantity: item.quantity,
-              sync_status: 'pending_sync'
-            }, async () => {
-              const res = await supabase.from('order_items').update({ status: newStatus }).eq('id', item.id).select().single();
-              return res;
+          if (payload.eventType === 'INSERT') {
+            playNotificationSound();
+            toast.info('New order received!', {
+              icon: <Bell className="w-4 h-4" />,
             });
           }
         }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'order_items',
+        },
+        (payload) => {
+          console.log('Order item change:', payload);
+          fetchOrders();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentRestaurant]);
+
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: newStatus })
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      // Also update order items based on their current status
+      if (newStatus === 'cooking') {
+        // Only update pending items to cooking (preserve ready items)
+        await supabase
+          .from('order_items')
+          .update({ status: newStatus })
+          .eq('order_id', orderId)
+          .eq('status', 'pending');
+      } else if (newStatus === 'ready') {
+        // Only update non-ready items to ready (e.g., cooking -> ready)
+        await supabase
+          .from('order_items')
+          .update({ status: newStatus })
+          .eq('order_id', orderId)
+          .neq('status', 'ready');
       }
 
       // If served, free up the table
       if (newStatus === 'served') {
+        const order = orders.find((o) => o.id === orderId);
         if (order?.table_id) {
-          await offlineMutate('tables', { id: order.table_id, is_occupied: false }, async () => {
-            const res = await supabase.from('tables').update({ is_occupied: false }).eq('id', order.table_id).select().single();
-            return res;
-          });
+          await supabase.from('tables').update({ is_occupied: false }).eq('id', order.table_id);
         }
       }
 
       toast.success(`Order marked as ${STATUS_CONFIG[newStatus].label}`);
     } catch (error: any) {
-      // Revert optimistic update on failure
-      fetchOrders();
       toast.error(error.message);
     }
   };
 
   const handleUpdateItemStatus = async (itemId: string, newStatus: OrderStatus, orderId: string) => {
-    // Optimistic UI: update item status immediately
-    setOrders(prev => prev.map(order => {
-      if (order.id !== orderId) return order;
-      const updatedItems = order.order_items.map(item =>
-        item.id === itemId ? { ...item, status: newStatus } : item
-      );
-      // If all items ready, update order status too
-      const allReady = updatedItems.every(item => item.status === 'ready');
-      return { ...order, order_items: updatedItems, status: allReady ? 'ready' as OrderStatus : order.status };
-    }));
-
     try {
-      await offlineMutate('order_items', { id: itemId, status: newStatus }, async () => {
-        const res = await supabase.from('order_items').update({ status: newStatus }).eq('id', itemId).select().single();
-        return res;
-      });
+      const { error } = await supabase
+        .from('order_items')
+        .update({ status: newStatus })
+        .eq('id', itemId);
+
+      if (error) throw error;
       
       // If marking as ready, check if all items in the order are now ready
       if (newStatus === 'ready') {
         const order = orders.find(o => o.id === orderId);
         if (order) {
+          // Check if all OTHER items are already ready (current item is being updated)
           const allItemsReady = order.order_items.every(
             item => item.id === itemId || item.status === 'ready'
           );
           
           if (allItemsReady) {
-            await offlineMutate('orders', { id: orderId, status: 'ready' }, async () => {
-              const res = await supabase.from('orders').update({ status: 'ready' }).eq('id', orderId).select().single();
-              return res;
-            });
+            // Auto-update order status to ready
+            await supabase
+              .from('orders')
+              .update({ status: 'ready' })
+              .eq('id', orderId);
             toast.success('All items ready - Order marked as Ready!');
             return;
           }
@@ -344,8 +247,6 @@ export default function KitchenView() {
       
       toast.success(`Item marked as ${STATUS_CONFIG[newStatus].label}`);
     } catch (error: any) {
-      // Revert on failure
-      fetchOrders();
       toast.error(error.message);
     }
   };
@@ -432,7 +333,7 @@ export default function KitchenView() {
           <div class="header">
             <h1>🍳 KITCHEN ORDER</h1>
             <div class="table-info">${order.table ? order.table.table_number : 'TAKEAWAY'}</div>
-            ${order.table ? `<div>${order.table.floor?.name || ''}</div>` : ''}
+            ${order.table ? `<div>${order.table.floor.name}</div>` : ''}
             <div class="time">${orderDate} ${orderTime}</div>
           </div>
           <div class="items">
@@ -538,7 +439,7 @@ export default function KitchenView() {
                           <CardTitle className="text-base">
                             {order.table.table_number}
                             <span className="text-xs text-muted-foreground ml-1">
-                              {order.table.floor?.name || ''}
+                              {order.table.floor.name}
                             </span>
                           </CardTitle>
                         ) : (

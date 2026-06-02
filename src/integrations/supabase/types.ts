@@ -429,7 +429,6 @@ export type Database = {
           slug: string
           cgst_percentage: number | null
           sgst_percentage: number | null
-          print_qr_on_bill: boolean | null
           updated_at: string
         }
         Insert: {
@@ -443,7 +442,6 @@ export type Database = {
           slug: string
           cgst_percentage?: number | null
           sgst_percentage?: number | null
-          print_qr_on_bill?: boolean | null
           updated_at?: string
         }
         Update: {
@@ -457,7 +455,6 @@ export type Database = {
           slug?: string
           cgst_percentage?: number | null
           sgst_percentage?: number | null
-          print_qr_on_bill?: boolean | null
           updated_at?: string
         }
         Relationships: []

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
 import { supabase } from '@/integrations/supabase/client';
-import { offlineQuery, isOffline } from '@/services/offlineDataService';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
@@ -38,95 +37,40 @@ export default function DashboardHome() {
     const fetchStats = async () => {
       try {
         const [kitchensRes, floorsRes, categoriesRes, ordersRes] = await Promise.all([
-          offlineQuery(
-            async () => {
-              const res = await supabase
-                .from('kitchens')
-                .select('id', { count: 'exact' })
-                .eq('restaurant_id', currentRestaurant.id);
-              return res;
-            },
-            { table: 'kitchens', filters: { restaurant_id: currentRestaurant.id } }
-          ),
-          offlineQuery(
-            async () => {
-              const res = await supabase
-                .from('floors')
-                .select('id, tables(id)', { count: 'exact' })
-                .eq('restaurant_id', currentRestaurant.id);
-              return res;
-            },
-            { table: 'floors', filters: { restaurant_id: currentRestaurant.id } }
-          ),
-          offlineQuery(
-            async () => {
-              const res = await supabase
-                .from('menu_categories')
-                .select('id, menu_items(id)', { count: 'exact' })
-                .eq('restaurant_id', currentRestaurant.id);
-              return res;
-            },
-            { table: 'menu_categories', filters: { restaurant_id: currentRestaurant.id } }
-          ),
-          offlineQuery(
-            async () => {
-              const res = await supabase
-                .from('orders')
-                .select('id', { count: 'exact' })
-                .eq('restaurant_id', currentRestaurant.id)
-                .in('status', ['pending', 'cooking']);
-              return res;
-            },
-            { table: 'orders', filters: { restaurant_id: currentRestaurant.id } }
-          ),
+          supabase
+            .from('kitchens')
+            .select('id', { count: 'exact' })
+            .eq('restaurant_id', currentRestaurant.id),
+          supabase
+            .from('floors')
+            .select('id, tables(id)', { count: 'exact' })
+            .eq('restaurant_id', currentRestaurant.id),
+          supabase
+            .from('menu_categories')
+            .select('id, menu_items(id)', { count: 'exact' })
+            .eq('restaurant_id', currentRestaurant.id),
+          supabase
+            .from('orders')
+            .select('id', { count: 'exact' })
+            .eq('restaurant_id', currentRestaurant.id)
+            .in('status', ['pending', 'cooking']),
         ]);
 
-        // When data comes from cache, count locally
-        const kitchensData = kitchensRes.data;
-        const floorsData = floorsRes.data;
-        const categoriesData = categoriesRes.data;
-        const ordersData = ordersRes.data;
+        const tablesCount = floorsRes.data?.reduce(
+          (acc, floor) => acc + (floor.tables?.length || 0),
+          0
+        ) || 0;
 
-        let tablesCount = 0;
-        let menuItemsCount = 0;
-
-        if (floorsRes.fromCache) {
-          // Cache returns flat records, count tables separately
-          // Use localQuery which is LAN-aware
-          const { localQuery } = await import('@/services/localDataService');
-          const tablesResult = await localQuery('tables');
-          tablesCount = tablesResult.data?.length || 0;
-        } else {
-          tablesCount = (floorsData as any[])?.reduce(
-            (acc: number, floor: any) => acc + (floor.tables?.length || 0),
-            0
-          ) || 0;
-        }
-
-        if (categoriesRes.fromCache) {
-          // menu_items has no restaurant_id column — join via category_id
-          const catIds = (categoriesData as any[])?.map((c: any) => c.id) || [];
-          if (catIds.length > 0) {
-            // Use localQuery which is LAN-aware
-            const { localQuery } = await import('@/services/localDataService');
-            const itemsResult = await localQuery('menu_items');
-            const allItems: any[] = itemsResult.data || [];
-            menuItemsCount = allItems.filter((item: any) => catIds.includes(item.category_id)).length;
-          }
-        } else {
-          menuItemsCount = (categoriesData as any[])?.reduce(
-            (acc: number, cat: any) => acc + (cat.menu_items?.length || 0),
-            0
-          ) || 0;
-        }
+        const menuItemsCount = categoriesRes.data?.reduce(
+          (acc, cat) => acc + (cat.menu_items?.length || 0),
+          0
+        ) || 0;
 
         setStats({
-          kitchens: kitchensRes.fromCache ? (kitchensData as any[])?.length || 0 : ((kitchensRes.data as any)?.length || 0),
+          kitchens: kitchensRes.count || 0,
           tables: tablesCount,
           menuItems: menuItemsCount,
-          activeOrders: ordersRes.fromCache
-            ? (ordersData as any[])?.filter((o: any) => o.status === 'pending' || o.status === 'cooking').length || 0
-            : ((ordersRes.data as any)?.length || 0),
+          activeOrders: ordersRes.count || 0,
         });
       } catch (error) {
         console.error('Error fetching stats:', error);
