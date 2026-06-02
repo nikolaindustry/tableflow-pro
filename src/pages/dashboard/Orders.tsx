@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
-import { supabase } from '@/integrations/supabase/client';
+import { offlineQuery, offlineMutate, isElectron } from '@/services/offlineDataService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -62,6 +62,8 @@ import {
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { useUSBPrinter } from '@/hooks/useUSBPrinter';
 import { BillingDialog } from '@/components/BillingDialog';
+import { getNextBillNumber } from '@/services/dailyBillNumber';
+import { getDataClient } from '@/services/localDataService';
 import type { Database } from '@/integrations/supabase/types';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 
@@ -97,6 +99,7 @@ interface OrderItem {
 
 interface Order {
   id: string;
+  restaurant_id: string;
   table_id: string | null;
   status: OrderStatus;
   total_amount: number;
@@ -170,33 +173,136 @@ export default function Orders() {
 
     try {
       const [ordersRes, tablesRes, menuRes] = await Promise.all([
-        supabase
-          .from('orders')
-          .select(`
-            *,
-            table:tables(table_number, floor:floors(name)),
-            order_items(*, menu_item:menu_items(name, food_type))
-          `)
-          .eq('restaurant_id', currentRestaurant.id)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('tables')
-          .select('id, table_number, floor:floors!inner(name, restaurant_id)')
-          .eq('floor.restaurant_id', currentRestaurant.id),
-        supabase
-          .from('menu_items')
-          .select('id, name, price, food_type, spice_level, is_available, category:menu_categories!inner(name, restaurant_id)')
-          .eq('category.restaurant_id', currentRestaurant.id)
-          .eq('is_available', true),
+        offlineQuery(
+          async () => {
+            const res = await supabase
+              .from('orders')
+              .select(`
+                *,
+                table:tables(table_number, floor:floors(name)),
+                order_items(*, menu_item:menu_items(name, food_type))
+              `)
+              .eq('restaurant_id', currentRestaurant.id)
+              .order('created_at', { ascending: false });
+            return res;
+          },
+          { table: 'orders', filters: { restaurant_id: currentRestaurant.id } }
+        ),
+        offlineQuery(
+          async () => {
+            const res = await supabase
+              .from('tables')
+              .select('id, table_number, floor:floors!inner(name, restaurant_id)')
+              .eq('floor.restaurant_id', currentRestaurant.id);
+            return res;
+          },
+          { table: 'tables' }
+        ),
+        offlineQuery(
+          async () => {
+            const res = await supabase
+              .from('menu_items')
+              .select('id, name, price, food_type, spice_level, is_available, category:menu_categories!inner(name, restaurant_id)')
+              .eq('category.restaurant_id', currentRestaurant.id)
+              .eq('is_available', true);
+            return res;
+          },
+          { table: 'menu_items', filters: { restaurant_id: currentRestaurant.id } }
+        ),
       ]);
 
-      if (ordersRes.error) throw ordersRes.error;
-      if (tablesRes.error) throw tablesRes.error;
-      if (menuRes.error) throw menuRes.error;
+      if (ordersRes.error && !ordersRes.fromCache) throw ordersRes.error;
+      if (tablesRes.error && !tablesRes.fromCache) throw tablesRes.error;
+      if (menuRes.error && !menuRes.fromCache) throw menuRes.error;
 
-      setOrders(ordersRes.data || []);
-      setTables((tablesRes.data as any) || []);
-      setMenuItems((menuRes.data as any) || []);
+      // Handle cached orders - need to assemble order_items and table
+      if (ordersRes.fromCache) {
+        const rawOrders = (ordersRes.data || []) as any[];
+        console.log('[Orders] Raw orders from SQLite:', rawOrders.map(o => ({ id: o.id, status: o.status, updated_at: o.updated_at })));
+        // Use localQuery which is LAN-aware
+        const { localQuery } = await import('@/services/localDataService');
+        const assembled: Order[] = [];
+        
+        // Fetch all menu_items and tables from local/LAN for joining
+        let localMenuItems: any[] = [];
+        let localTables: any[] = [];
+        let localFloors: any[] = [];
+        
+        const [menuResult, tablesResult, floorsResult] = await Promise.all([
+          localQuery('menu_items'),
+          localQuery('tables'),
+          localQuery('floors')
+        ]);
+        localMenuItems = menuResult.data || [];
+        localTables = tablesResult.data || [];
+        localFloors = floorsResult.data || [];
+        
+        for (const order of rawOrders) {
+          let orderItems: any[] = [];
+          const itemsRes = await localQuery('order_items', { order_id: order.id });
+          // Join with menu_items to get the name and food_type
+          orderItems = (itemsRes.data || []).map((item: any) => {
+            const menuItem = localMenuItems.find((m: any) => m.id === item.menu_item_id);
+            return {
+              ...item,
+              menu_item: menuItem ? {
+                name: menuItem.name,
+                food_type: menuItem.food_type
+              } : null
+            };
+          });
+          
+          // Join with tables and floors to get table info
+          let tableInfo = null;
+          if (order.table_id) {
+            const table = localTables.find((t: any) => t.id === order.table_id);
+            if (table) {
+              const floor = localFloors.find((f: any) => f.id === table.floor_id);
+              tableInfo = {
+                table_number: table.table_number,
+                floor: floor ? { name: floor.name } : { name: 'Unknown' }
+              };
+            }
+          }
+          
+          assembled.push({ ...order, order_items: orderItems, table: tableInfo } as any);
+        }
+        console.log('[Orders] Setting assembled orders:', assembled.map(o => ({ id: o.id, status: o.status, table: o.table?.table_number })));
+        setOrders(assembled);
+      } else {
+        console.log('[Orders] Setting orders from cloud:', (ordersRes.data || []).map((o: any) => ({ id: o.id, status: o.status })));
+        setOrders((ordersRes.data || []) as Order[]);
+      }
+
+      setTables(((tablesRes.data as any) || []) as Table[]);
+
+      if (menuRes.fromCache) {
+        const items = (menuRes.data || []) as any[];
+        console.log('[Orders] Raw menu items from SQLite:', items.length, 'items');
+        console.log('[Orders] Menu items sample:', items.slice(0, 2));
+        
+        // Join with menu_categories to get category names
+        const db = getDataClient();
+        let categories: any[] = [];
+        if (db) {
+          const catRes = await db.query('menu_categories');
+          categories = catRes.data || [];
+        }
+        
+        const menuWithCategories = items.map((item: any) => {
+          const category = categories.find((c: any) => c.id === item.category_id);
+          return {
+            ...item,
+            category: category ? { name: category.name } : { name: 'Uncategorized' }
+          };
+        });
+        
+        const availableItems = menuWithCategories.filter((i: any) => i.is_available !== false);
+        console.log('[Orders] Available menu items:', availableItems.length, 'items');
+        setMenuItems(availableItems);
+      } else {
+        setMenuItems(((menuRes.data as any) || []) as MenuItem[]);
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -208,48 +314,25 @@ export default function Orders() {
     fetchData();
   }, [fetchData]);
 
-  // Real-time subscription for orders
+  // Refresh data when page becomes visible (e.g., after navigating back from Kiosk)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[Orders] Page visible, refreshing data...');
+        fetchData();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [fetchData]);
+
+  // Poll for order updates every 5 seconds (no realtime in local mode)
   useEffect(() => {
     if (!currentRestaurant) return;
 
-    const channel = supabase
-      .channel('orders-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'orders',
-          filter: `restaurant_id=eq.${currentRestaurant.id}`,
-        },
-        (payload) => {
-          console.log('Order change:', payload);
-          fetchData();
-          
-          if (payload.eventType === 'INSERT') {
-            toast.info('New order created!', {
-              icon: <Bell className="w-4 h-4" />,
-            });
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'order_items',
-        },
-        () => {
-          console.log('Order items changed');
-          fetchData();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    const interval = setInterval(fetchData, 5000);
+    return () => clearInterval(interval);
   }, [currentRestaurant, fetchData]);
 
   const resetForm = () => {
@@ -295,36 +378,55 @@ export default function Orders() {
 
     try {
       // Create order
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert({
-          restaurant_id: currentRestaurant.id,
-          table_id: selectedTableId && selectedTableId !== 'takeaway' ? selectedTableId : null,
-          total_amount: cartTotal,
-          notes: orderNotes || null,
-          status: 'pending',
-        })
-        .select()
-        .single();
+      const orderId = crypto.randomUUID();
+      
+      // Generate daily bill number
+      const billNumber = await getNextBillNumber();
+      
+      const orderData = {
+        id: orderId,
+        restaurant_id: currentRestaurant.id,
+        table_id: selectedTableId && selectedTableId !== 'takeaway' ? selectedTableId : null,
+        total_amount: cartTotal,
+        notes: orderNotes || null,
+        status: 'pending' as const,
+        bill_number: billNumber,
+      };
+
+      const { data: order, error: orderError } = await offlineMutate(
+        'orders',
+        orderData,
+        async () => {
+          const res = await supabase.from('orders').insert(orderData).select().single();
+          return res;
+        }
+      );
 
       if (orderError) throw orderError;
 
       // Create order items
       const orderItems = cart.map((item) => ({
-        order_id: order.id,
+        id: crypto.randomUUID(),
+        order_id: order?.id || orderId,
         menu_item_id: item.menuItemId,
         quantity: item.quantity,
         unit_price: item.price,
         status: 'pending' as OrderStatus,
       }));
 
-      const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-
-      if (itemsError) throw itemsError;
+      for (const oi of orderItems) {
+        await offlineMutate('order_items', oi, async () => {
+          const res = await supabase.from('order_items').insert(oi).select().single();
+          return res;
+        });
+      }
 
       // Update table to occupied if selected
       if (selectedTableId) {
-        await supabase.from('tables').update({ is_occupied: true }).eq('id', selectedTableId);
+        await offlineMutate('tables', { id: selectedTableId, is_occupied: true }, async () => {
+          const res = await supabase.from('tables').update({ is_occupied: true }).eq('id', selectedTableId).select().single();
+          return res;
+        });
       }
 
       toast.success('Order created successfully');
@@ -338,25 +440,41 @@ export default function Orders() {
 
   const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: newStatus })
-        .eq('id', orderId);
+      // Get the current order to preserve restaurant_id
+      const currentOrder = orders.find((o) => o.id === orderId);
+      if (!currentOrder) return;
 
-      if (error) throw error;
+      // Update local state immediately for responsive UI
+      setOrders(prevOrders => 
+        prevOrders.map(order => 
+          order.id === orderId ? { ...order, status: newStatus } : order
+        )
+      );
+
+      await offlineMutate('orders', { 
+        id: orderId, 
+        status: newStatus,
+        restaurant_id: currentOrder.restaurant_id || currentRestaurant?.id
+      }, async () => {
+        const res = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId).select().single();
+        return res;
+      });
 
       // If served or cancelled, free up the table
       if (newStatus === 'served' || newStatus === 'cancelled') {
-        const order = orders.find((o) => o.id === orderId);
-        if (order?.table_id) {
-          await supabase.from('tables').update({ is_occupied: false }).eq('id', order.table_id);
+        if (currentOrder?.table_id) {
+          await offlineMutate('tables', { id: currentOrder.table_id, is_occupied: false }, async () => {
+            const res = await supabase.from('tables').update({ is_occupied: false }).eq('id', currentOrder.table_id).select().single();
+            return res;
+          });
         }
       }
 
       toast.success(`Order marked as ${newStatus}`);
-      fetchData();
     } catch (error: any) {
       toast.error(error.message);
+      // Don't revert - keep the UI state even if background save failed
+      // The sync mechanism will handle retries
     }
   };
 
@@ -366,30 +484,61 @@ export default function Orders() {
     setBillingDialogOpen(true);
   };
 
-  const handlePaymentComplete = async (paymentMethod: 'cash' | 'card' | 'upi') => {
+  const handlePaymentComplete = async (
+    paymentMethod: 'cash' | 'card' | 'upi',
+    billing?: { subtotal: number; discountAmount: number; cgstAmount: number; sgstAmount: number; finalAmount: number }
+  ) => {
     if (!billingOrder) return;
-    
+
+    // Persist the discount/GST breakdown so the saved bill matches what was charged.
+    const billingFields = billing
+      ? {
+          discount_amount: billing.discountAmount,
+          cgst_amount: billing.cgstAmount,
+          sgst_amount: billing.sgstAmount,
+          final_amount: billing.finalAmount,
+        }
+      : {};
+
+    // Update local state immediately
+    setOrders(prevOrders =>
+      prevOrders.map(order =>
+        order.id === billingOrder.id
+          ? { ...order, status: 'served', payment_method: paymentMethod, ...billingFields }
+          : order
+      )
+    );
+
     // Mark order as served and record payment method
-    await supabase
-      .from('orders')
-      .update({ status: 'served', payment_method: paymentMethod })
-      .eq('id', billingOrder.id);
+    await offlineMutate('orders', {
+      id: billingOrder.id,
+      status: 'served',
+      payment_method: paymentMethod,
+      payment_status: 'paid',
+      ...billingFields,
+      restaurant_id: billingOrder.restaurant_id || currentRestaurant?.id
+    }, async () => {
+      const res = await supabase.from('orders').update({ status: 'served', payment_method: paymentMethod }).eq('id', billingOrder.id).select().single();
+      return res;
+    });
 
     // Free up the table
     if (billingOrder.table_id) {
-      await supabase.from('tables').update({ is_occupied: false }).eq('id', billingOrder.table_id);
+      await offlineMutate('tables', { id: billingOrder.table_id, is_occupied: false }, async () => {
+        const res = await supabase.from('tables').update({ is_occupied: false }).eq('id', billingOrder.table_id).select().single();
+        return res;
+      });
     }
 
     setBillingDialogOpen(false);
     setBillingOrder(null);
     toast.success(`Payment received via ${paymentMethod.toUpperCase()}`);
-    fetchData();
   };
 
   const filteredMenuItems = menuItems.filter(
     (item) =>
       item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.category.name.toLowerCase().includes(searchTerm.toLowerCase())
+      (item.category?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const activeOrders = orders.filter((o) => ['pending', 'cooking', 'ready'].includes(o.status));
@@ -550,7 +699,7 @@ export default function Orders() {
                       <SelectItem value="takeaway">Takeaway / No Table</SelectItem>
                       {tables.map((table) => (
                         <SelectItem key={table.id} value={table.id}>
-                          {table.table_number} ({table.floor.name})
+                          {table.table_number} ({table.floor?.name || 'Unknown'})
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -583,7 +732,7 @@ export default function Orders() {
                             {renderFoodTypeIcon(item.food_type)}
                             <div className="min-w-0">
                               <p className="font-medium text-sm truncate">{item.name}</p>
-                              <p className="text-xs text-muted-foreground">{item.category.name}</p>
+                              <p className="text-xs text-muted-foreground">{item.category?.name || 'Uncategorized'}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
@@ -743,7 +892,7 @@ export default function Orders() {
                         <SelectItem value="takeaway">Takeaway / No Table</SelectItem>
                         {tables.map((table) => (
                           <SelectItem key={table.id} value={table.id}>
-                            {table.table_number} ({table.floor.name})
+                            {table.table_number} ({table.floor?.name || 'Unknown'})
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -772,7 +921,7 @@ export default function Orders() {
                               {renderFoodTypeIcon(item.food_type)}
                               <div>
                                 <p className="font-medium">{item.name}</p>
-                                <p className="text-xs text-muted-foreground">{item.category.name}</p>
+                                <p className="text-xs text-muted-foreground">{item.category?.name || 'Uncategorized'}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -945,6 +1094,8 @@ export default function Orders() {
         restaurantGstin={currentRestaurant?.gstin}
         restaurantCgstPercentage={currentRestaurant?.cgst_percentage || 0}
         restaurantSgstPercentage={currentRestaurant?.sgst_percentage || 0}
+        showQrCode={currentRestaurant?.print_qr_on_bill !== false}
+        paymentQrContent={(currentRestaurant as any)?.payment_qr_content}
       />
 
       {/* Cancel Order Confirmation Dialog */}

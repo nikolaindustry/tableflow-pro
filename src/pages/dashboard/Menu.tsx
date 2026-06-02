@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
 import { supabase } from '@/integrations/supabase/client';
+import { offlineQuery, offlineMutate, offlineDelete } from '@/services/offlineDataService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -49,6 +50,8 @@ interface MenuItem {
   image_url: string | null;
   category_id: string;
   kitchen_id: string | null;
+  shortcut_code: string | null; // Keyboard shortcut (1-9)
+  sort_order?: number | null;
   created_at: string;
 }
 
@@ -123,40 +126,74 @@ export default function Menu() {
   const [itemAvailable, setItemAvailable] = useState(true);
   const [itemCategoryId, setItemCategoryId] = useState('');
   const [itemKitchenId, setItemKitchenId] = useState('');
+  const [itemShortcutCode, setItemShortcutCode] = useState(''); // Keyboard shortcut (1-9 for quick access, or any number for search)
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null); // Drag-to-reorder
 
   const fetchData = async () => {
     if (!currentRestaurant) return;
 
     try {
-      const [categoriesRes, itemsRes, kitchensRes] = await Promise.all([
-        supabase
-          .from('menu_categories')
-          .select('*')
-          .eq('restaurant_id', currentRestaurant.id)
-          .order('sort_order', { ascending: true }),
-        supabase
-          .from('menu_items')
-          .select('*')
-          .in('category_id', (await supabase
-            .from('menu_categories')
-            .select('id')
-            .eq('restaurant_id', currentRestaurant.id)).data?.map(c => c.id) || []),
-        supabase
-          .from('kitchens')
-          .select('id, name')
-          .eq('restaurant_id', currentRestaurant.id)
-          .eq('is_active', true),
+      const [categoriesRes, kitchensRes] = await Promise.all([
+        offlineQuery(
+          async () => {
+            const res = await supabase
+              .from('menu_categories')
+              .select('*')
+              .eq('restaurant_id', currentRestaurant.id)
+              .order('sort_order', { ascending: true });
+            return res;
+          },
+          { table: 'menu_categories', filters: { restaurant_id: currentRestaurant.id } }
+        ),
+        offlineQuery(
+          async () => {
+            const res = await supabase
+              .from('kitchens')
+              .select('id, name')
+              .eq('restaurant_id', currentRestaurant.id)
+              .eq('is_active', true);
+            return res;
+          },
+          { table: 'kitchens', filters: { restaurant_id: currentRestaurant.id, is_active: 1 } }
+        ),
       ]);
 
-      if (categoriesRes.error) throw categoriesRes.error;
-      setCategories(categoriesRes.data || []);
+      if (categoriesRes.error && !categoriesRes.fromCache) throw categoriesRes.error;
+      const cats = (categoriesRes.data || []) as MenuCategory[];
+      setCategories(cats);
       
-      if (!itemsRes.error) {
-        setMenuItems(itemsRes.data || []);
+      if (!kitchensRes.error || kitchensRes.fromCache) {
+        setKitchens((kitchensRes.data || []) as Kitchen[]);
       }
-      
-      if (!kitchensRes.error) {
-        setKitchens(kitchensRes.data || []);
+
+      // Fetch menu items
+      if (cats.length > 0) {
+        const categoryIds = cats.map(c => c.id);
+        const itemsRes = await offlineQuery(
+          async () => {
+            const res = await supabase
+              .from('menu_items')
+              .select('*')
+              .in('category_id', categoryIds);
+            return res;
+          },
+          { table: 'menu_items' }  // No restaurant_id filter - menu_items doesn't have that column
+        );
+        if (!itemsRes.error || itemsRes.fromCache) {
+          let items = (itemsRes.data || []) as MenuItem[];
+          if (itemsRes.fromCache) {
+            items = items.filter(i => categoryIds.includes(i.category_id));
+          }
+          // Show in the saved drag order (sort_order). Tiebreak must MATCH the
+          // kiosk (created_at, then name) so the default order is identical on
+          // both screens when items haven't been dragged yet.
+          items = items.slice().sort((a, b) =>
+            ((a.sort_order ?? 0) - (b.sort_order ?? 0)) ||
+            String(a.created_at || '').localeCompare(String(b.created_at || '')) ||
+            String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true, sensitivity: 'base' })
+          );
+          setMenuItems(items);
+        }
       }
     } catch (error) {
       console.error('Error fetching menu data:', error);
@@ -194,27 +231,31 @@ export default function Menu() {
     if (!currentRestaurant) return;
 
     try {
-      if (editingCategory) {
-        const { error } = await supabase
-          .from('menu_categories')
-          .update({
-            name: categoryName,
-            description: categoryDescription || null,
-            is_active: categoryActive,
-          })
-          .eq('id', editingCategory.id);
+      const catData = {
+        restaurant_id: currentRestaurant.id,
+        name: categoryName,
+        description: categoryDescription || null,
+        is_active: categoryActive,
+        sort_order: categories.length,
+        ...(editingCategory ? { id: editingCategory.id } : {}),
+      };
 
+      if (editingCategory) {
+        const { error } = await offlineMutate('menu_categories', catData, async () => {
+          const res = await supabase
+            .from('menu_categories')
+            .update({ name: categoryName, description: categoryDescription || null, is_active: categoryActive })
+            .eq('id', editingCategory.id)
+            .select().single();
+          return res;
+        });
         if (error) throw error;
         toast.success('Category updated successfully');
       } else {
-        const { error } = await supabase.from('menu_categories').insert({
-          restaurant_id: currentRestaurant.id,
-          name: categoryName,
-          description: categoryDescription || null,
-          is_active: categoryActive,
-          sort_order: categories.length,
+        const { error } = await offlineMutate('menu_categories', catData, async () => {
+          const res = await supabase.from('menu_categories').insert(catData).select().single();
+          return res;
         });
-
         if (error) throw error;
         toast.success('Category created successfully');
       }
@@ -231,7 +272,10 @@ export default function Menu() {
     if (!confirm('Are you sure? This will also delete all items in this category.')) return;
 
     try {
-      const { error } = await supabase.from('menu_categories').delete().eq('id', id);
+      const { error } = await offlineDelete('menu_categories', id, async () => {
+        const res = await supabase.from('menu_categories').delete().eq('id', id);
+        return res;
+      });
       if (error) throw error;
       toast.success('Category deleted');
       fetchData();
@@ -251,6 +295,7 @@ export default function Menu() {
     setItemAvailable(true);
     setItemCategoryId('');
     setItemKitchenId('');
+    setItemShortcutCode('');
     setEditingItem(null);
   };
 
@@ -266,6 +311,7 @@ export default function Menu() {
       setItemAvailable(item.is_available);
       setItemCategoryId(item.category_id);
       setItemKitchenId(item.kitchen_id || '');
+      setItemShortcutCode(item.shortcut_code || '');
     } else {
       resetItemForm();
       if (categoryId) setItemCategoryId(categoryId);
@@ -287,18 +333,23 @@ export default function Menu() {
         is_available: itemAvailable,
         category_id: itemCategoryId,
         kitchen_id: itemKitchenId || null,
+        shortcut_code: itemShortcutCode || null,
+        // New items append to the end; edits leave sort_order untouched.
+        ...(editingItem ? { id: editingItem.id } : { sort_order: menuItems.length }),
       };
 
       if (editingItem) {
-        const { error } = await supabase
-          .from('menu_items')
-          .update(itemData)
-          .eq('id', editingItem.id);
-
+        const { error } = await offlineMutate('menu_items', itemData, async () => {
+          const res = await supabase.from('menu_items').update(itemData as any).eq('id', editingItem.id).select().single();
+          return res;
+        });
         if (error) throw error;
         toast.success('Menu item updated successfully');
       } else {
-        const { error } = await supabase.from('menu_items').insert(itemData);
+        const { error } = await offlineMutate('menu_items', itemData, async () => {
+          const res = await supabase.from('menu_items').insert(itemData as any).select().single();
+          return res;
+        });
         if (error) throw error;
         toast.success('Menu item created successfully');
       }
@@ -311,11 +362,62 @@ export default function Menu() {
     }
   };
 
+  // ── Drag-to-reorder menu items ──────────────────────────────────────────
+  const reorderMenuItems = async (targetId: string) => {
+    const sourceId = draggedItemId;
+    setDraggedItemId(null);
+    if (!sourceId || sourceId === targetId) return;
+
+    const arr = [...menuItems];
+    const from = arr.findIndex(i => i.id === sourceId);
+    const to = arr.findIndex(i => i.id === targetId);
+    if (from < 0 || to < 0) return;
+
+    const [moved] = arr.splice(from, 1);
+    arr.splice(to, 0, moved);
+
+    // Re-index sort_order by position and show the new order immediately.
+    const reindexed = arr.map((it, idx) => ({ ...it, sort_order: idx }));
+    setMenuItems(reindexed);
+
+    // Persist the FULL ordering directly to the local SQLite (admin/server action).
+    // Use the DB handle straight (not offlineMutate) so the write can't be
+    // intercepted by client/offline routing, and surface any failure.
+    const db = (window as any).electronAPI?.db;
+    if (!db?.upsert) {
+      toast.error('Database not available — order not saved');
+      return;
+    }
+    try {
+      for (let idx = 0; idx < reindexed.length; idx++) {
+        const it = reindexed[idx];
+        // Send the FULL item (incl. NOT NULL columns category_id/name/price) with
+        // the new sort_order — a partial upsert fails the NOT NULL constraints.
+        const res = await db.upsert('menu_items', {
+          ...it,
+          sort_order: idx,
+          updated_at: new Date().toISOString(),
+        });
+        if (res && res.success === false) {
+          throw new Error(res.error || 'upsert failed');
+        }
+      }
+      toast.success('Menu order saved');
+    } catch (err: any) {
+      console.error('[Menu] save order error:', err);
+      toast.error('Could not save order: ' + (err?.message || err));
+      fetchData(); // revert to stored order on failure
+    }
+  };
+
   const handleDeleteItem = async (id: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return;
 
     try {
-      const { error } = await supabase.from('menu_items').delete().eq('id', id);
+      const { error } = await offlineDelete('menu_items', id, async () => {
+        const res = await supabase.from('menu_items').delete().eq('id', id);
+        return res;
+      });
       if (error) throw error;
       toast.success('Item deleted');
       fetchData();
@@ -326,11 +428,10 @@ export default function Menu() {
 
   const toggleItemAvailability = async (item: MenuItem) => {
     try {
-      const { error } = await supabase
-        .from('menu_items')
-        .update({ is_available: !item.is_available })
-        .eq('id', item.id);
-
+      const { error } = await offlineMutate('menu_items', { id: item.id, is_available: !item.is_available }, async () => {
+        const res = await supabase.from('menu_items').update({ is_available: !item.is_available }).eq('id', item.id).select().single();
+        return res;
+      });
       if (error) throw error;
       toast.success(`Item ${!item.is_available ? 'available' : 'unavailable'}`);
       fetchData();
@@ -581,6 +682,31 @@ export default function Menu() {
                       </div>
 
                       <div className="space-y-2">
+                        <Label htmlFor="item-shortcut">
+                          Keyboard Shortcut <span className="text-muted-foreground text-xs">(1-9 for quick keys, or any number for search)</span>
+                        </Label>
+                        <Input
+                          id="item-shortcut"
+                          type="text"
+                          maxLength={5}
+                          pattern="[0-9]*"
+                          value={itemShortcutCode}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            // Allow empty or any number (multi-digit support)
+                            if (val === '' || /^[0-9]+$/.test(val)) {
+                              setItemShortcutCode(val);
+                            }
+                          }}
+                          placeholder="e.g., 5 or 100 or 250"
+                          className="text-center text-lg font-bold"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          1-9: Quick keyboard access in kiosk | Any number: Searchable in menu bar
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
                         <Label htmlFor="item-category">Category *</Label>
                         <Select value={itemCategoryId} onValueChange={setItemCategoryId} required>
                           <SelectTrigger>
@@ -733,7 +859,19 @@ export default function Menu() {
                   .map((item) => {
                     const category = categories.find(c => c.id === item.category_id);
                     return (
-                      <Card key={item.id} className={`group hover:shadow-lg transition-all duration-200 ${!item.is_available ? 'opacity-60' : ''}`}>
+                      <Card
+                        key={item.id}
+                        draggable
+                        onDragStart={(e) => {
+                          setDraggedItemId(item.id);
+                          e.dataTransfer.effectAllowed = 'move';
+                          e.dataTransfer.setData('text/plain', item.id);
+                        }}
+                        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                        onDrop={(e) => { e.preventDefault(); reorderMenuItems(item.id); }}
+                        onDragEnd={() => setDraggedItemId(null)}
+                        className={`group hover:shadow-lg transition-all duration-200 cursor-grab active:cursor-grabbing ${!item.is_available ? 'opacity-60' : ''} ${draggedItemId === item.id ? 'opacity-40 ring-2 ring-primary' : ''}`}
+                      >
                         <CardHeader className="pb-3">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
