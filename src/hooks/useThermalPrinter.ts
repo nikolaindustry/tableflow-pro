@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { thermalPrinter, PrinterDevice, BillData } from '@/services/thermalPrinter';
+import { thermalPrinter, PrinterDevice, BillData, SummaryPrintData } from '@/services/thermalPrinter';
 
 export function useThermalPrinter() {
   const [scanning, setScanning] = useState(false);
@@ -53,6 +53,19 @@ export function useThermalPrinter() {
     }
   }, [isBluetoothAvailable]);
 
+  const printSummary = useCallback(async (summary: SummaryPrintData, useBluetooth: boolean = false) => {
+    setPrinting(true);
+    try {
+      if (useBluetooth && isBluetoothAvailable) {
+        await thermalPrinter.printSummaryViaBluetooth(summary);
+      } else {
+        thermalPrinter.printSummaryViaBrowser(summary);
+      }
+    } finally {
+      setPrinting(false);
+    }
+  }, [isBluetoothAvailable]);
+
   return {
     scanning,
     devices,
@@ -64,5 +77,6 @@ export function useThermalPrinter() {
     connect,
     disconnect,
     printBill,
+    printSummary,
   };
 }

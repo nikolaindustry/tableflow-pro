@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useRestaurant } from "@/contexts/RestaurantContext";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { supabase } from "@/integrations/supabase/client";
+import { offlineQuery, offlineMutate } from "@/services/offlineDataService";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -91,51 +91,45 @@ export default function Expenses() {
   }, [restaurant?.id, dateRange]);
 
   const fetchCategories = async () => {
-    const { data } = await supabase
-      .from("expense_categories")
-      .select("*")
-      .eq("restaurant_id", restaurant!.id)
-      .order("name");
-    if (data) setCategories(data);
+    const { data } = await offlineQuery(
+      async () => ({ data: null, error: null }),
+      { table: "expense_categories", filters: { restaurant_id: restaurant!.id } }
+    );
+    if (data) setCategories(data as any);
   };
 
   const fetchSuppliers = async () => {
-    const { data } = await supabase
-      .from("suppliers")
-      .select("*")
-      .eq("restaurant_id", restaurant!.id)
-      .order("name");
-    if (data) setSuppliers(data);
+    const { data } = await offlineQuery(
+      async () => ({ data: null, error: null }),
+      { table: "suppliers", filters: { restaurant_id: restaurant!.id } }
+    );
+    if (data) setSuppliers(data as any);
   };
 
   const fetchExpenses = async () => {
-    const { data } = await supabase
-      .from("expenses")
-      .select(`
-        *,
-        category:expense_categories(*),
-        supplier:suppliers(*)
-      `)
-      .eq("restaurant_id", restaurant!.id)
-      .gte("expense_date", dateRange.start)
-      .lte("expense_date", dateRange.end)
-      .order("expense_date", { ascending: false });
+    const { data } = await offlineQuery(
+      async () => ({ data: null, error: null }),
+      { table: "expenses", filters: { restaurant_id: restaurant!.id } }
+    );
     if (data) {
-      setExpenses(data);
-      setTotalExpenses(data.reduce((sum, e) => sum + Number(e.amount), 0));
+      const expensesData = data as any[];
+      setExpenses(expensesData);
+      setTotalExpenses(expensesData.reduce((sum, e) => sum + Number(e.amount), 0));
     }
   };
 
   const fetchEarnings = async () => {
-    const { data } = await supabase
-      .from("orders")
-      .select("total_amount")
-      .eq("restaurant_id", restaurant!.id)
-      .eq("status", "served")
-      .gte("created_at", dateRange.start)
-      .lte("created_at", dateRange.end + "T23:59:59");
+    const { data } = await offlineQuery(
+      async () => ({ data: null, error: null }),
+      { table: "orders", filters: { restaurant_id: restaurant!.id, status: "served" } }
+    );
     if (data) {
-      setEarnings(data.reduce((sum, o) => sum + Number(o.total_amount), 0));
+      const orders = data as any[];
+      const filtered = orders.filter(o => {
+        const orderDate = o.created_at?.split('T')[0];
+        return orderDate >= dateRange.start && orderDate <= dateRange.end;
+      });
+      setEarnings(filtered.reduce((sum, o) => sum + Number(o.total_amount), 0));
     }
   };
 
@@ -147,20 +141,19 @@ export default function Expenses() {
     }
     setLoading(true);
     if (editingCategory) {
-      const { error } = await supabase
-        .from("expense_categories")
-        .update({ name: categoryForm.name, description: categoryForm.description || null })
-        .eq("id", editingCategory.id);
+      const { error } = await offlineMutate(
+        "expense_categories",
+        { id: editingCategory.id, name: categoryForm.name, description: categoryForm.description || null },
+        async () => ({ data: null, error: null })
+      );
       if (error) toast.error(error.message);
       else toast.success("Category updated");
     } else {
-      const { error } = await supabase
-        .from("expense_categories")
-        .insert({ 
-          restaurant_id: restaurant!.id, 
-          name: categoryForm.name, 
-          description: categoryForm.description || null 
-        });
+      const { error } = await offlineMutate(
+        "expense_categories",
+        { restaurant_id: restaurant!.id, name: categoryForm.name, description: categoryForm.description || null },
+        async () => ({ data: null, error: null })
+      );
       if (error) toast.error(error.message);
       else toast.success("Category created");
     }
@@ -173,7 +166,11 @@ export default function Expenses() {
 
   const handleDeleteCategory = async (id: string) => {
     if (!confirm("Delete this category?")) return;
-    const { error } = await supabase.from("expense_categories").delete().eq("id", id);
+    const { error } = await offlineMutate(
+      "expense_categories",
+      { id, _delete: true },
+      async () => ({ data: null, error: null })
+    );
     if (error) toast.error(error.message);
     else { toast.success("Category deleted"); fetchCategories(); }
   };
@@ -193,11 +190,19 @@ export default function Expenses() {
       address: supplierForm.address || null
     };
     if (editingSupplier) {
-      const { error } = await supabase.from("suppliers").update(payload).eq("id", editingSupplier.id);
+      const { error } = await offlineMutate(
+        "suppliers",
+        { id: editingSupplier.id, ...payload },
+        async () => ({ data: null, error: null })
+      );
       if (error) toast.error(error.message);
       else toast.success("Supplier updated");
     } else {
-      const { error } = await supabase.from("suppliers").insert({ ...payload, restaurant_id: restaurant!.id });
+      const { error } = await offlineMutate(
+        "suppliers",
+        { ...payload, restaurant_id: restaurant!.id },
+        async () => ({ data: null, error: null })
+      );
       if (error) toast.error(error.message);
       else toast.success("Supplier created");
     }
@@ -210,7 +215,11 @@ export default function Expenses() {
 
   const handleDeleteSupplier = async (id: string) => {
     if (!confirm("Delete this supplier?")) return;
-    const { error } = await supabase.from("suppliers").delete().eq("id", id);
+    const { error } = await offlineMutate(
+      "suppliers",
+      { id, _delete: true },
+      async () => ({ data: null, error: null })
+    );
     if (error) toast.error(error.message);
     else { toast.success("Supplier deleted"); fetchSuppliers(); }
   };
@@ -231,11 +240,19 @@ export default function Expenses() {
       supplier_id: expenseForm.supplier_id || null
     };
     if (editingExpense) {
-      const { error } = await supabase.from("expenses").update(payload).eq("id", editingExpense.id);
+      const { error } = await offlineMutate(
+        "expenses",
+        { id: editingExpense.id, ...payload },
+        async () => ({ data: null, error: null })
+      );
       if (error) toast.error(error.message);
       else toast.success("Expense updated");
     } else {
-      const { error } = await supabase.from("expenses").insert({ ...payload, restaurant_id: restaurant!.id });
+      const { error } = await offlineMutate(
+        "expenses",
+        { ...payload, restaurant_id: restaurant!.id },
+        async () => ({ data: null, error: null })
+      );
       if (error) toast.error(error.message);
       else toast.success("Expense recorded");
     }
@@ -251,7 +268,11 @@ export default function Expenses() {
 
   const handleDeleteExpense = async (id: string) => {
     if (!confirm("Delete this expense?")) return;
-    const { error } = await supabase.from("expenses").delete().eq("id", id);
+    const { error } = await offlineMutate(
+      "expenses",
+      { id, _delete: true },
+      async () => ({ data: null, error: null })
+    );
     if (error) toast.error(error.message);
     else { toast.success("Expense deleted"); fetchExpenses(); }
   };

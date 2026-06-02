@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRestaurant } from '@/contexts/RestaurantContext';
 import { supabase } from '@/integrations/supabase/client';
+import { offlineQuery, offlineMutate, offlineDelete } from '@/services/offlineDataService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -62,16 +63,37 @@ export default function Floors() {
     if (!currentRestaurant) return;
 
     try {
-      const { data, error } = await supabase
-        .from('floors')
-        .select('*, tables(*)')
-        .eq('restaurant_id', currentRestaurant.id)
-        .order('floor_number', { ascending: true });
+      const result = await offlineQuery(
+        async () => {
+          const res = await supabase
+            .from('floors')
+            .select('*, tables(*)')
+            .eq('restaurant_id', currentRestaurant.id)
+            .order('floor_number', { ascending: true });
+          return res;
+        },
+        { table: 'floors', filters: { restaurant_id: currentRestaurant.id } }
+      );
 
-      if (error) throw error;
-      setFloors(data || []);
-      if (data && data.length > 0 && !selectedFloorId) {
-        setSelectedFloorId(data[0].id);
+      if (result.error && !result.fromCache) throw result.error;
+
+      let floorsData: Floor[] = [];
+      if (result.fromCache) {
+        // Cache returns flat floors, need to attach tables
+        const rawFloors = (result.data || []) as any[];
+        // Use localQuery which is LAN-aware
+        const { localQuery } = await import('@/services/localDataService');
+        for (const floor of rawFloors) {
+          const tablesResult = await localQuery('tables', { floor_id: floor.id });
+          floorsData.push({ ...floor, tables: tablesResult.data || [] });
+        }
+      } else {
+        floorsData = (result.data || []) as Floor[];
+      }
+
+      setFloors(floorsData);
+      if (floorsData.length > 0 && !selectedFloorId) {
+        setSelectedFloorId(floorsData[0].id);
       }
     } catch (error) {
       console.error('Error fetching floors:', error);
@@ -125,21 +147,38 @@ export default function Floors() {
     if (!currentRestaurant) return;
 
     try {
-      if (editingFloor) {
-        const { error } = await supabase
-          .from('floors')
-          .update({ name: floorName, floor_number: parseInt(floorNumber) })
-          .eq('id', editingFloor.id);
+      const floorData = {
+        restaurant_id: currentRestaurant.id,
+        name: floorName,
+        floor_number: parseInt(floorNumber),
+        ...(editingFloor ? { id: editingFloor.id } : {}),
+      };
 
+      if (editingFloor) {
+        const { error } = await offlineMutate(
+          'floors',
+          floorData,
+          async () => {
+            const res = await supabase
+              .from('floors')
+              .update({ name: floorName, floor_number: parseInt(floorNumber) })
+              .eq('id', editingFloor.id)
+              .select()
+              .single();
+            return res;
+          }
+        );
         if (error) throw error;
         toast.success('Floor updated successfully');
       } else {
-        const { error } = await supabase.from('floors').insert({
-          restaurant_id: currentRestaurant.id,
-          name: floorName,
-          floor_number: parseInt(floorNumber),
-        });
-
+        const { error } = await offlineMutate(
+          'floors',
+          floorData,
+          async () => {
+            const res = await supabase.from('floors').insert(floorData).select().single();
+            return res;
+          }
+        );
         if (error) throw error;
         toast.success('Floor created successfully');
       }
@@ -159,21 +198,38 @@ export default function Floors() {
     if (!floorId) return;
 
     try {
-      if (editingTable) {
-        const { error } = await supabase
-          .from('tables')
-          .update({ table_number: tableNumber, capacity: parseInt(tableCapacity) })
-          .eq('id', editingTable.id);
+      const tableData = {
+        floor_id: floorId,
+        table_number: tableNumber,
+        capacity: parseInt(tableCapacity),
+        ...(editingTable ? { id: editingTable.id } : {}),
+      };
 
+      if (editingTable) {
+        const { error } = await offlineMutate(
+          'tables',
+          tableData,
+          async () => {
+            const res = await supabase
+              .from('tables')
+              .update({ table_number: tableNumber, capacity: parseInt(tableCapacity) })
+              .eq('id', editingTable.id)
+              .select()
+              .single();
+            return res;
+          }
+        );
         if (error) throw error;
         toast.success('Table updated successfully');
       } else {
-        const { error } = await supabase.from('tables').insert({
-          floor_id: floorId,
-          table_number: tableNumber,
-          capacity: parseInt(tableCapacity),
-        });
-
+        const { error } = await offlineMutate(
+          'tables',
+          tableData,
+          async () => {
+            const res = await supabase.from('tables').insert(tableData).select().single();
+            return res;
+          }
+        );
         if (error) throw error;
         toast.success('Table created successfully');
       }
@@ -190,7 +246,10 @@ export default function Floors() {
     if (!confirm('Are you sure? This will delete all tables on this floor.')) return;
 
     try {
-      const { error } = await supabase.from('floors').delete().eq('id', id);
+      const { error } = await offlineDelete('floors', id, async () => {
+        const res = await supabase.from('floors').delete().eq('id', id);
+        return res;
+      });
       if (error) throw error;
       toast.success('Floor deleted');
       fetchFloors();
@@ -203,7 +262,10 @@ export default function Floors() {
     if (!confirm('Are you sure you want to delete this table?')) return;
 
     try {
-      const { error } = await supabase.from('tables').delete().eq('id', id);
+      const { error } = await offlineDelete('tables', id, async () => {
+        const res = await supabase.from('tables').delete().eq('id', id);
+        return res;
+      });
       if (error) throw error;
       toast.success('Table deleted');
       fetchFloors();
