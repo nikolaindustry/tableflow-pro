@@ -78,6 +78,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { offlineQuery, offlineMutate, offlineDelete, isOffline } from '@/services/offlineDataService';
 import { getDataClient } from '@/services/localDataService';
+import { buildReportReceipt } from '@/services/printerBridge';
 import { BillingDialog } from '@/components/BillingDialog';
 import { BillEditDialog } from '@/components/BillEditDialog';
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
@@ -152,6 +153,7 @@ interface ReportPrintDialogProps {
   dateRange: string;
   stats: ReportStats;
   popularItems: { name: string; quantity: number; revenue: number }[];
+  allSoldItems: { name: string; quantity: number; revenue: number }[];
 }
 
 function ReportPrintDialogInner({
@@ -161,6 +163,7 @@ function ReportPrintDialogInner({
   dateRange,
   stats,
   popularItems,
+  allSoldItems,
 }: ReportPrintDialogProps) {
   const { printBill: printThermal, connectedDevice, isBluetoothAvailable, printing: thermalPrinting } = useThermalPrinter();
   const {
@@ -295,11 +298,14 @@ function ReportPrintDialogInner({
         { name: '--- PAYMENT BREAKDOWN ---', quantity: 1, price: 0 },
         { name: 'Cash Payments', quantity: 1, price: stats.cashRevenue },
         { name: 'Online Payments', quantity: 1, price: stats.onlineRevenue },
-        { name: '--- TOP SELLING ITEMS ---', quantity: 1, price: 0 },
-        ...popularItems.slice(0, 5).map(item => ({
+        { name: '--- ITEM SALES ---', quantity: 1, price: 0 },
+        ...allSoldItems.map(item => ({
           name: item.name,
           quantity: item.quantity,
-          price: item.revenue,
+          // Pass the average UNIT price so the receipt's amount column
+          // (price × qty) resolves to this item's total revenue. Passing the
+          // revenue directly here double-multiplied it into a garbage figure.
+          price: item.quantity > 0 ? item.revenue / item.quantity : item.revenue,
         })),
       ],
       subtotal: stats.totalRevenue,
@@ -310,10 +316,44 @@ function ReportPrintDialogInner({
       sgstAmount: stats.sgstTotal,
     };
 
+    // Dedicated report layout (full-width label→value rows + item table) so big
+    // money values never overflow the bill's narrow columns.
+    const reportReceipt = {
+      restaurantName: currentRestaurant.name,
+      restaurantAddress: currentRestaurant.address,
+      restaurantPhone: currentRestaurant.phone,
+      restaurantGstin: (currentRestaurant as any).gstin,
+      periodLabel: dateRangeLabel,
+      totalRevenue: stats.totalRevenue,
+      completedOrders: stats.completedOrders,
+      avgOrderValue: stats.avgOrderValue,
+      cashRevenue: stats.cashRevenue,
+      onlineRevenue: stats.onlineRevenue,
+      cgstPercentage: currentRestaurant.cgst_percentage ?? 0,
+      sgstPercentage: currentRestaurant.sgst_percentage ?? 0,
+      cgstAmount: stats.cgstTotal,
+      sgstAmount: stats.sgstTotal,
+      grandTotal: stats.grandTotal,
+      items: allSoldItems.map(i => ({ name: i.name, quantity: i.quantity, revenue: i.revenue })),
+    };
+
     try {
       if (method === 'usb') {
-        await printUSB(reportBillData);
-        onOpenChange(false);
+        const api = (window as any).electronAPI?.printer;
+        if (isElectronApp && api?.print) {
+          // Desktop: send the dedicated report bytes to the connected/selected printer.
+          const bytes = buildReportReceipt(reportReceipt);
+          const result = await api.print(Array.from(bytes));
+          if (result?.success === false) {
+            toast.error(`Print failed: ${result.error || 'unknown error'}`);
+          } else {
+            onOpenChange(false);
+          }
+        } else {
+          // Non-Electron WebUSB fallback: reuse the bill-format path.
+          await printUSB(reportBillData);
+          onOpenChange(false);
+        }
       } else if (method === 'bluetooth' && connectedDevice) {
         await printThermal(reportBillData, true);
         onOpenChange(false);
@@ -342,8 +382,8 @@ function ReportPrintDialogInner({
           '--- PAYMENT BREAKDOWN ---', '',
           `Cash:    ₹${stats.cashRevenue.toLocaleString()}`,
           `Online:  ₹${stats.onlineRevenue.toLocaleString()}`, '',
-          '--- TOP ITEMS ---', '',
-          ...popularItems.slice(0, 5).map((item, idx) => `${idx + 1}. ${item.name} (${item.quantity} sold)`),
+          '--- ITEM SALES ---', '',
+          ...allSoldItems.map((item, idx) => `${idx + 1}. ${item.name} x${item.quantity}  Rs.${item.revenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`),
           '', '========================================', '', '', '',
         ];
         const printWindow = window.open('', '_blank', 'width=300,height=600');
@@ -405,14 +445,14 @@ function ReportPrintDialogInner({
           <p className="font-semibold">PAYMENT BREAKDOWN</p>
           <div className="flex justify-between"><span>Cash</span><span>₹{stats.cashRevenue.toLocaleString()}</span></div>
           <div className="flex justify-between"><span>Online</span><span>₹{stats.onlineRevenue.toLocaleString()}</span></div>
-          {popularItems.length > 0 && (
+          {allSoldItems.length > 0 && (
             <>
               <Separator className="my-2" />
-              <p className="font-semibold">TOP ITEMS</p>
-              {popularItems.slice(0, 5).map((item, idx) => (
+              <p className="font-semibold">ITEM SALES ({allSoldItems.length})</p>
+              {allSoldItems.map((item, idx) => (
                 <div key={item.name} className="flex justify-between">
-                  <span>{idx + 1}. {item.name}</span>
-                  <span>{item.quantity} sold</span>
+                  <span>{idx + 1}. {item.name} ×{item.quantity}</span>
+                  <span>₹{item.revenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               ))}
             </>
@@ -1008,6 +1048,27 @@ export default function Reports() {
     return Array.from(itemMap.values())
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 5);
+  }, [orders]);
+
+  // Every item sold in the period (full list, highest quantity first) — used for
+  // the printed report's item-sales summary. popularItems keeps only the top 5
+  // for the on-screen widgets; the printout needs the complete list.
+  const allSoldItems = useMemo(() => {
+    const itemMap = new Map<string, MenuItem>();
+    orders
+      .filter(o => o.status === 'served')
+      .forEach(order => {
+        order.order_items.forEach(item => {
+          const name = item.menu_item?.name || 'Unknown';
+          const existing = itemMap.get(name) || { name, quantity: 0, revenue: 0 };
+          itemMap.set(name, {
+            name,
+            quantity: existing.quantity + item.quantity,
+            revenue: existing.revenue + (item.quantity * Number(item.unit_price)),
+          });
+        });
+      });
+    return Array.from(itemMap.values()).sort((a, b) => b.quantity - a.quantity);
   }, [orders]);
 
   // Hourly data for today
@@ -1965,6 +2026,11 @@ export default function Reports() {
                                 <span className="font-semibold text-foreground">
                                   Order #{order.id.slice(0, 8).toUpperCase()}
                                 </span>
+                                {(order as any).bill_number != null && (
+                                  <Badge variant="secondary" className="font-mono">
+                                    Bill #{String((order as any).bill_number).padStart(3, '0')}
+                                  </Badge>
+                                )}
                                 <Badge className={cn('status-badge', STATUS_CONFIG[order.status].className)}>
                                   {STATUS_CONFIG[order.status].label}
                                 </Badge>
@@ -2214,6 +2280,7 @@ export default function Reports() {
           dateRange={dateRange}
           stats={stats}
           popularItems={popularItems}
+          allSoldItems={allSoldItems}
         />
       </div>
     </DashboardLayout>

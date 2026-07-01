@@ -137,7 +137,10 @@ function buildReceipt(bill: BillData): Uint8Array {
 
   text('--------------------------------'); nl();
 
-  add(CMD.ALIGN_LEFT);
+  // Center the whole body: every item row is a fixed 32-char string, so
+  // centering keeps the columns aligned while giving symmetric margins — the
+  // receipt stays readable even if the printer's horizontal alignment drifts.
+  add(CMD.ALIGN_CENTER);
   const billDate = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
   text(`Table: ${bill.tableNumber || 'Takeaway'}`); nl();
   text(`Date: ${billDate}`); nl();
@@ -167,9 +170,8 @@ function buildReceipt(bill: BillData): Uint8Array {
   }
 
   text('--------------------------------'); nl();
-  add(CMD.ALIGN_LEFT);
+  add(CMD.ALIGN_CENTER);
   text(`Total Qty: ${totalQty}`); nl();
-  add(CMD.ALIGN_RIGHT);
   const subtotal = bill.subtotal || bill.total;
   text(`Sub Total: Rs.${subtotal.toFixed(2)}`); nl();
 
@@ -207,6 +209,109 @@ function buildReceipt(bill: BillData): Uint8Array {
     offset += part.length;
   }
   return result;
+}
+
+// ── Dedicated Sales-Report receipt ──────────────────────────────────────────
+// The report has its OWN layout (full-width label→value rows + an item table)
+// instead of reusing the bill's 4-column item format, where large money values
+// overflow the narrow price column. Everything is centred and padded to the
+// 32-char width so it stays readable regardless of printer alignment.
+export interface ReportReceiptData {
+  restaurantName: string;
+  restaurantAddress?: string | null;
+  restaurantPhone?: string | null;
+  restaurantGstin?: string | null;
+  periodLabel: string;
+  totalRevenue: number;
+  completedOrders: number;
+  avgOrderValue: number;
+  cashRevenue: number;
+  onlineRevenue: number;
+  cgstPercentage: number;
+  sgstPercentage: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  grandTotal: number;
+  items: { name: string; quantity: number; revenue: number }[];
+}
+
+export function buildReportReceipt(r: ReportReceiptData): Uint8Array {
+  const encoder = new TextEncoder();
+  const parts: (number[] | Uint8Array)[] = [];
+  const add = (data: number[] | Uint8Array) => parts.push(data);
+  const text = (str: string) => add(encoder.encode(str));
+  const nl = () => add([LF]);
+  const WIDTH = 32;
+  const sep = () => { text('-'.repeat(WIDTH)); nl(); };
+  const money = (n: number) => 'Rs.' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Full-width label→value row: label left, value right, never overflowing.
+  const lv = (label: string, value: string) => {
+    const room = Math.max(0, WIDTH - value.length - 1);
+    text(label.substring(0, room).padEnd(room) + ' ' + value); nl();
+  };
+  // Item row: name(16) qty(5) amount(11) = 32.
+  const item = (name: string, qty: string, amt: string) => {
+    text(name.substring(0, 16).padEnd(16) + qty.padStart(5) + amt.padStart(11)); nl();
+  };
+
+  add(CMD.INIT);
+  add(CMD.ALIGN_CENTER);
+
+  add(CMD.BOLD_ON); add(CMD.DOUBLE_WIDTH_ON);
+  text(r.restaurantName); nl();
+  add(CMD.DOUBLE_WIDTH_OFF); add(CMD.BOLD_OFF);
+  if (r.restaurantAddress) { text(r.restaurantAddress); nl(); }
+  if (r.restaurantPhone) { text(`Ph: ${r.restaurantPhone}`); nl(); }
+  if (r.restaurantGstin) { text(`GSTIN: ${r.restaurantGstin}`); nl(); }
+  sep();
+  add(CMD.BOLD_ON); text('SALES REPORT'); nl(); add(CMD.BOLD_OFF);
+  text(`Period: ${r.periodLabel}`); nl();
+  text(new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })); nl();
+  sep();
+
+  add(CMD.BOLD_ON); text('REVENUE SUMMARY'); nl(); add(CMD.BOLD_OFF);
+  lv('Subtotal (excl GST)', money(r.totalRevenue));
+  lv('Completed Orders', String(r.completedOrders));
+  lv('Avg Order Value', money(r.avgOrderValue));
+  if (r.cgstAmount > 0) lv(`CGST (${r.cgstPercentage}%)`, money(r.cgstAmount));
+  if (r.sgstAmount > 0) lv(`SGST (${r.sgstPercentage}%)`, money(r.sgstAmount));
+  sep();
+
+  add(CMD.BOLD_ON); text('PAYMENT BREAKDOWN'); nl(); add(CMD.BOLD_OFF);
+  lv('Cash', money(r.cashRevenue));
+  lv('Online', money(r.onlineRevenue));
+  sep();
+
+  if (r.items.length > 0) {
+    add(CMD.BOLD_ON); text(`ITEM SALES (${r.items.length})`); nl();
+    item('Item', 'Qty', 'Amount'); add(CMD.BOLD_OFF);
+    let totalQty = 0;
+    for (const it of r.items) {
+      totalQty += it.quantity;
+      item(it.name, String(it.quantity), it.revenue.toFixed(0));
+    }
+    sep();
+    lv('Total Qty', String(totalQty));
+    sep();
+  }
+
+  add(CMD.BOLD_ON); add(CMD.DOUBLE_SIZE_ON);
+  text(`TOTAL: ${money(r.grandTotal)}`); nl();
+  add(CMD.DOUBLE_SIZE_OFF); add(CMD.BOLD_OFF);
+  sep();
+  text('*** END OF REPORT ***'); nl();
+
+  add(CMD.FEED_LINES(4));
+  add(CMD.PARTIAL_CUT);
+
+  const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
+  const out = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part instanceof Uint8Array ? part : new Uint8Array(part), offset);
+    offset += part.length;
+  }
+  return out;
 }
 
 function buildSummaryReceipt(summary: SummaryPrintData): Uint8Array {

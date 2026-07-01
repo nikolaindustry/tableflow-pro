@@ -580,6 +580,11 @@ export default function Orders() {
                 <StatusIcon className="w-3 h-3 mr-1" />
                 {STATUS_CONFIG[order.status].label}
               </Badge>
+              {(order as any).bill_number != null && (
+                <Badge variant="secondary" className="font-mono">
+                  Bill #{String((order as any).bill_number).padStart(3, '0')}
+                </Badge>
+              )}
             </div>
             <div className="text-right">
               <p className="font-bold text-lg">₹{order.total_amount}</p>
