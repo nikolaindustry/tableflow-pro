@@ -145,6 +145,9 @@ export default function OrderKioskSplit() {
   const [moveSourceTable, setMoveSourceTable] = useState<Table | null>(null);
   const [tableOccupationTimes, setTableOccupationTimes] = useState<Record<string, string>>({});
   const [tableAmounts, setTableAmounts] = useState<Record<string, number>>({});
+  // Tables whose current order has already been printed (bill number assigned) →
+  // rendered in green on the grid so staff can see at a glance which are billed.
+  const [printedTableIds, setPrintedTableIds] = useState<Record<string, boolean>>({});
   const [tableSearchQuery, setTableSearchQuery] = useState('');
   const [billNumberSearch, setBillNumberSearch] = useState('');
   const [hasAutoSelected, setHasAutoSelected] = useState(false);
@@ -254,13 +257,17 @@ export default function OrderKioskSplit() {
           if (ordersData) {
             const times: Record<string, string> = {};
             const subtotals: Record<string, number> = {};
+            const printed: Record<string, boolean> = {};
             ordersData.forEach(order => {
               if (!times[order.table_id]) {
                 times[order.table_id] = order.created_at;
               }
               subtotals[order.table_id] = (subtotals[order.table_id] || 0) + (Number(order.total_amount) || 0);
+              // An assigned bill number means this table's bill has been printed.
+              if ((order as any).bill_number != null) printed[order.table_id] = true;
             });
             setTableOccupationTimes(times);
+            setPrintedTableIds(printed);
 
             // GST-inclusive amount per occupied table (for the table card).
             const cgstPct = (currentRestaurant as any)?.cgst_percentage || 0;
@@ -780,15 +787,15 @@ export default function OrderKioskSplit() {
       // Case 1: No existing order - create new one
       if (!currentOrderId) {
         const orderId = crypto.randomUUID();
-        const billNumber = await getNextBillNumber();
-        
+        // Bill number is NOT assigned here. It is reserved on the first print
+        // (see BillingDialog.ensureBillNumber) so numbers follow the printing
+        // sequence, and orders that are never printed stay unnumbered.
         const orderData = {
           id: orderId,
           restaurant_id: currentRestaurant.id,
           table_id: selectedTable.id,
           total_amount: newTotal,
           status: 'pending',
-          bill_number: billNumber,
         };
         
         await db.upsert('orders', orderData);
@@ -1373,14 +1380,16 @@ export default function OrderKioskSplit() {
                               className={`p-2 rounded-lg border transition-all relative h-[104px] flex flex-col items-center text-center ${
                                 selectedTable?.id === table.id
                                   ? 'border-primary bg-primary/10'
+                                  : table.is_occupied && printedTableIds[table.id]
+                                  ? 'border-success bg-success/10 hover:border-success/50'
                                   : table.is_occupied
                                   ? 'border-warning bg-warning/10 hover:border-warning/50'
                                   : 'border-muted bg-muted/50 hover:border-primary/50'
                               }`}
                             >
-                              {/* Status indicator dot */}
+                              {/* Status indicator dot: red = occupied unbilled, green = printed or free */}
                               <div className={`absolute top-1 right-1 w-2 h-2 rounded-full ${
-                                table.is_occupied ? 'bg-destructive' : 'bg-success'
+                                table.is_occupied && !printedTableIds[table.id] ? 'bg-destructive' : 'bg-success'
                               }`} />
 
                               <div className="font-semibold text-sm leading-tight">{table.table_number}</div>
@@ -1678,9 +1687,12 @@ export default function OrderKioskSplit() {
           setShowBillDialog(open);
           if (!open) {
             setBillingOrder(null);
+            // Refresh the grid so a table just printed shows green immediately.
+            fetchData();
           }
         }}
         order={billingOrder}
+        restaurantId={currentRestaurant?.id}
         onPaymentComplete={handlePaymentComplete}
         restaurantName={currentRestaurant?.name}
         restaurantAddress={currentRestaurant?.address}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -29,6 +29,8 @@ import { Usb } from 'lucide-react';
 import { useThermalPrinter } from '@/hooks/useThermalPrinter';
 import { useUSBPrinter } from '@/hooks/useUSBPrinter';
 import { isElectron, printerBridge } from '@/services/printerBridge';
+import { getNextBillNumber } from '@/services/dailyBillNumber';
+import { offlineMutate } from '@/services/offlineDataService';
 import { PrinterSelector } from '@/components/PrinterSelector';
 import { toast } from 'sonner';
 import type { BillData, SummaryPrintData } from '@/services/thermalPrinter';
@@ -53,6 +55,9 @@ interface BillingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   order: BillingOrder | null;
+  /** Restaurant id — required so the on-print bill-number write passes the LAN
+   *  server's order validation (which requires restaurant_id). */
+  restaurantId?: string;
   onPaymentComplete: (
     paymentMethod: 'cash' | 'card' | 'upi',
     billing?: { subtotal: number; discountAmount: number; cgstAmount: number; sgstAmount: number; finalAmount: number }
@@ -71,6 +76,7 @@ export function BillingDialog({
   open,
   onOpenChange,
   order,
+  restaurantId,
   onPaymentComplete,
   restaurantName,
   restaurantAddress,
@@ -129,6 +135,49 @@ export function BillingDialog({
   const [selectedWindowsPrinter, setSelectedWindowsPrinter] = useState<string>('');
   const [matchingPrinters, setMatchingPrinters] = useState<string[]>([]); // Printers matching current VID/PID
 
+  // ── Bill number: assigned lazily on the FIRST print, not at order creation ──
+  // The number is reserved from the shared sequence only when a bill is actually
+  // printed, then persisted onto the order so every reprint of this table shows
+  // the SAME number. Orders that are booked but never printed stay unnumbered.
+  const [assignedBillNumber, setAssignedBillNumber] = useState<number | null>(
+    (order as any)?.bill_number ?? null
+  );
+  const billNumberInFlight = useRef(false);
+
+  // Re-sync the local view whenever a different order is opened in the dialog.
+  useEffect(() => {
+    setAssignedBillNumber((order as any)?.bill_number ?? null);
+  }, [order?.id]);
+
+  const effectiveBillNumber: number | null = (order as any)?.bill_number ?? assignedBillNumber;
+
+  // Reserve + persist a bill number the first time this order is printed; reused
+  // on every reprint. Guarded so a double-click can't reserve two numbers.
+  const ensureBillNumber = async (): Promise<number | undefined> => {
+    if (!order) return undefined;
+    const existing = (order as any).bill_number ?? assignedBillNumber;
+    if (existing) return existing;
+    if (billNumberInFlight.current) return undefined;
+    billNumberInFlight.current = true;
+    try {
+      const n = await getNextBillNumber();
+      setAssignedBillNumber(n);
+      try {
+        // restaurant_id is included because the LAN server validates every order
+        // upsert and requires it; without it the write is rejected on client PCs.
+        const patch: Record<string, any> = { id: order.id, bill_number: n };
+        const rid = restaurantId ?? (order as any).restaurant_id;
+        if (rid) patch.restaurant_id = rid;
+        await offlineMutate('orders', patch);
+      } catch (e) {
+        console.warn('[BillingDialog] Failed to persist bill number:', e);
+      }
+      return n;
+    } finally {
+      billNumberInFlight.current = false;
+    }
+  };
+
   // Group order items by menu item name for display/printing
   const groupOrderItems = (items: OrderItem[]) => {
     const grouped = new Map<string, { name: string; quantity: number; unit_price: number; total: number }>();
@@ -163,7 +212,7 @@ export function BillingDialog({
     }
   }, [open, isElectronApp, refreshDevices]);
 
-  const getBillData = (): BillData | null => {
+  const getBillData = (billNumberOverride?: number): BillData | null => {
     if (!order) return null;
     
     console.log('[BillingDialog] ========== BILL DIALOG DEBUG ==========');
@@ -182,7 +231,7 @@ export function BillingDialog({
       restaurantGstin: restaurantGstin,
       tableNumber: order.table?.table_number,
       orderId: order.id,
-      billNumber: (order as any).bill_number,
+      billNumber: billNumberOverride ?? effectiveBillNumber ?? undefined,
       showQrCode,
       paymentQrContent,
       customerName: customerName.trim() || undefined,
@@ -204,9 +253,13 @@ export function BillingDialog({
   };
 
   const handlePrintBill = async (method: 'usb' | 'bluetooth' | 'browser' | 'windows' = 'usb') => {
-    const billData = getBillData();
+    // Assign the bill number on the FIRST print and persist it to the order, so
+    // reprints of this table reuse the same number. Orders never printed stay
+    // unnumbered (paying without printing does NOT assign one).
+    const billNumber = await ensureBillNumber();
+    const billData = getBillData(billNumber);
     if (!billData) return;
-    
+
     try {
       if (method === 'windows' && selectedWindowsPrinter) {
         // Print using Windows printer
@@ -245,7 +298,7 @@ export function BillingDialog({
       restaurantPhone: restaurantPhone,
       tableNumber: order.table?.table_number,
       floorName: order.table?.floor?.name,
-      billNumber: (order as any).bill_number,
+      billNumber: effectiveBillNumber ?? undefined,
       items: groupOrderItems(order.order_items).map(item => ({
         name: item.name,
         quantity: item.quantity,
@@ -489,7 +542,7 @@ export function BillingDialog({
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
                 <span className="text-sm font-medium text-blue-900">Bill Number:</span>
                 <span className="text-lg font-bold text-blue-700">
-                  {(order as any).bill_number ? `#${String((order as any).bill_number).padStart(3, '0')}` : 'Not assigned'}
+                  {effectiveBillNumber ? `#${String(effectiveBillNumber).padStart(3, '0')}` : 'Not printed yet'}
                 </span>
               </div>
               

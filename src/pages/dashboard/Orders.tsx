@@ -379,10 +379,10 @@ export default function Orders() {
     try {
       // Create order
       const orderId = crypto.randomUUID();
-      
-      // Generate daily bill number
-      const billNumber = await getNextBillNumber();
-      
+
+      // Bill number is NOT assigned here — it is reserved on the first print
+      // (see BillingDialog.ensureBillNumber) so numbers follow the printing
+      // sequence, and orders that are never printed stay unnumbered.
       const orderData = {
         id: orderId,
         restaurant_id: currentRestaurant.id,
@@ -390,7 +390,6 @@ export default function Orders() {
         total_amount: cartTotal,
         notes: orderNotes || null,
         status: 'pending' as const,
-        bill_number: billNumber,
       };
 
       const { data: order, error: orderError } = await offlineMutate(
@@ -1087,6 +1086,7 @@ export default function Orders() {
         open={billingDialogOpen}
         onOpenChange={setBillingDialogOpen}
         order={billingOrder}
+        restaurantId={currentRestaurant?.id}
         onPaymentComplete={handlePaymentComplete}
         restaurantName={currentRestaurant?.name}
         restaurantAddress={currentRestaurant?.address}
