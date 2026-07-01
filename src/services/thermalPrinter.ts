@@ -202,25 +202,25 @@ class ThermalPrinterService {
 
       // Add subtotal
       const subtotal = bill.subtotal || bill.total;
-      printer.text(`Subtotal: ₹${subtotal.toFixed(2)}\n`);
+      printer.text(`Subtotal: ₹${Math.round(subtotal)}\n`);
 
       // Discount (if any)
       if (bill.discountAmount && bill.discountAmount > 0) {
-        printer.text(`Discount: -₹${bill.discountAmount.toFixed(2)}\n`);
+        printer.text(`Discount: -₹${Math.round(bill.discountAmount)}\n`);
       }
 
       // Add GST details if available
       if (bill.cgstPercentage && bill.cgstAmount) {
-        printer.text(`CGST (${bill.cgstPercentage}%): ₹${bill.cgstAmount.toFixed(2)}\n`);
+        printer.text(`CGST (${bill.cgstPercentage}%): ₹${Math.round(bill.cgstAmount)}\n`);
       }
       if (bill.sgstPercentage && bill.sgstAmount) {
-        printer.text(`SGST (${bill.sgstPercentage}%): ₹${bill.sgstAmount.toFixed(2)}\n`);
+        printer.text(`SGST (${bill.sgstPercentage}%): ₹${Math.round(bill.sgstAmount)}\n`);
       }
 
       await printer
         .text('--------------------------------\n')
         .bold()
-        .text(`Grand Total: ₹${bill.total.toFixed(2)}\n`)
+        .text(`Grand Total: ₹${Math.round(bill.total)}\n`)
         .clearFormatting()
         .align('center')
         .text('\n')
@@ -268,8 +268,8 @@ class ThermalPrinterService {
       <tr>
         <td style="padding: 6px 0;">${item.name}</td>
         <td style="text-align: center;">${item.quantity}</td>
-        <td style="text-align: right;">₹${item.price.toFixed(2)}</td>
-        <td style="text-align: right;">₹${(item.price * item.quantity).toFixed(2)}</td>
+        <td style="text-align: right;">₹${Math.round(item.price)}</td>
+        <td style="text-align: right;">₹${Math.round(item.price * item.quantity)}</td>
       </tr>
     `
       )
@@ -331,29 +331,29 @@ class ThermalPrinterService {
           <table>
             <tr>
               <td colspan="3">Subtotal</td>
-              <td style="text-align: right;">₹${(bill.subtotal || bill.total).toFixed(2)}</td>
+              <td style="text-align: right;">₹${Math.round(bill.subtotal || bill.total)}</td>
             </tr>
             ${bill.discountAmount && bill.discountAmount > 0 ? `
             <tr>
               <td colspan="3">Discount</td>
-              <td style="text-align: right;">-₹${bill.discountAmount.toFixed(2)}</td>
+              <td style="text-align: right;">-₹${Math.round(bill.discountAmount)}</td>
             </tr>
             ` : ''}
             ${bill.cgstPercentage && bill.cgstAmount ? `
             <tr>
               <td colspan="3">CGST (${bill.cgstPercentage}%)</td>
-              <td style="text-align: right;">₹${bill.cgstAmount.toFixed(2)}</td>
+              <td style="text-align: right;">₹${Math.round(bill.cgstAmount)}</td>
             </tr>
             ` : ''}
             ${bill.sgstPercentage && bill.sgstAmount ? `
             <tr>
               <td colspan="3">SGST (${bill.sgstPercentage}%)</td>
-              <td style="text-align: right;">₹${bill.sgstAmount.toFixed(2)}</td>
+              <td style="text-align: right;">₹${Math.round(bill.sgstAmount)}</td>
             </tr>
             ` : ''}
             <tr class="total-row">
               <td colspan="3"><strong>Grand Total</strong></td>
-              <td style="text-align: right;"><strong>₹${bill.total.toFixed(2)}</strong></td>
+              <td style="text-align: right;"><strong>₹${Math.round(bill.total)}</strong></td>
             </tr>
           </table>
           <div class="footer">

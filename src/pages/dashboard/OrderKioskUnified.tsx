@@ -1396,7 +1396,7 @@ export default function OrderKioskSplit() {
                               {table.is_occupied ? (
                                 <>
                                   <div className="text-xs font-bold text-primary leading-tight">
-                                    ₹{(tableAmounts[table.id] ?? 0).toFixed(2)}
+                                    ₹{Math.round(tableAmounts[table.id] ?? 0)}
                                   </div>
                                   {tableOccupationTimes[table.id] && (
                                     <TableOccupiedTimer occupiedSince={tableOccupationTimes[table.id]} />
@@ -1626,21 +1626,21 @@ export default function OrderKioskSplit() {
                   <div className="space-y-1 text-sm text-muted-foreground">
                     <div className="flex justify-between">
                       <span>Subtotal</span>
-                      <span>₹{totalAmount.toFixed(2)}</span>
+                      <span>₹{Math.round(totalAmount)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>CGST ({cartCgstPct}%)</span>
-                      <span>₹{cartCgstAmount.toFixed(2)}</span>
+                      <span>₹{Math.round(cartCgstAmount)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>SGST ({cartSgstPct}%)</span>
-                      <span>₹{cartSgstAmount.toFixed(2)}</span>
+                      <span>₹{Math.round(cartSgstAmount)}</span>
                     </div>
                   </div>
                 )}
                 <div className="flex justify-between items-center">
                   <span className="text-lg font-semibold">{cartHasGst ? 'Total (incl. GST)' : 'Total'}</span>
-                  <span className="text-2xl font-bold">₹{cartTotalWithGst.toFixed(2)}</span>
+                  <span className="text-2xl font-bold">₹{Math.round(cartTotalWithGst)}</span>
                 </div>
                 
                 <Button

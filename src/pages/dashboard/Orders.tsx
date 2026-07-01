@@ -587,7 +587,7 @@ export default function Orders() {
               )}
             </div>
             <div className="text-right">
-              <p className="font-bold text-lg">₹{order.total_amount}</p>
+              <p className="font-bold text-lg">₹{Math.round(order.total_amount)}</p>
               <p className="text-xs text-muted-foreground">
                 {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </p>
@@ -763,7 +763,7 @@ export default function Orders() {
                   <div className="flex items-center justify-between">
                     <div>
                       <Label>Order Items ({cart.length})</Label>
-                      <p className="text-sm text-muted-foreground">Total: <span className="font-bold text-foreground">₹{cartTotal}</span></p>
+                      <p className="text-sm text-muted-foreground">Total: <span className="font-bold text-foreground">₹{Math.round(cartTotal)}</span></p>
                     </div>
                   </div>
                   {cart.length === 0 ? (
@@ -852,7 +852,7 @@ export default function Orders() {
                     <div className="flex items-center justify-between pt-3 border-t">
                       <div>
                         <p className="text-sm text-muted-foreground">Total</p>
-                        <p className="text-xl font-bold">₹{cartTotal}</p>
+                        <p className="text-xl font-bold">₹{Math.round(cartTotal)}</p>
                       </div>
                       <Button
                         variant="gradient"
@@ -1008,7 +1008,7 @@ export default function Orders() {
                   <div className="flex items-center justify-between pt-4 border-t">
                     <div>
                       <p className="text-sm text-muted-foreground">Total</p>
-                      <p className="text-2xl font-bold">₹{cartTotal}</p>
+                      <p className="text-2xl font-bold">₹{Math.round(cartTotal)}</p>
                     </div>
                     <Button
                       variant="gradient"

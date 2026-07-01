@@ -163,33 +163,35 @@ function buildReceipt(bill: BillData): Uint8Array {
   add(CMD.BOLD_OFF);
   text('--------------------------------'); nl();
 
+  // Bills carry no paise — every amount is rounded to whole rupees.
+  const r0 = (n: number) => String(Math.round(n));
   let totalQty = 0;
   for (const item of bill.items) {
     totalQty += item.quantity;
-    text(row4(item.name, String(item.quantity), item.price.toFixed(2), (item.price * item.quantity).toFixed(2))); nl();
+    text(row4(item.name, String(item.quantity), r0(item.price), r0(item.price * item.quantity))); nl();
   }
 
   text('--------------------------------'); nl();
   add(CMD.ALIGN_CENTER);
   text(`Total Qty: ${totalQty}`); nl();
   const subtotal = bill.subtotal || bill.total;
-  text(`Sub Total: Rs.${subtotal.toFixed(2)}`); nl();
+  text(`Sub Total: Rs.${r0(subtotal)}`); nl();
 
   if (bill.discountAmount && bill.discountAmount > 0) {
-    text(`Discount: -Rs.${bill.discountAmount.toFixed(2)}`); nl();
+    text(`Discount: -Rs.${r0(bill.discountAmount)}`); nl();
   }
 
   if (bill.cgstPercentage && bill.cgstAmount) {
-    text(`CGST (${bill.cgstPercentage}%): Rs.${bill.cgstAmount.toFixed(2)}`); nl();
+    text(`CGST (${bill.cgstPercentage}%): Rs.${r0(bill.cgstAmount)}`); nl();
   }
   if (bill.sgstPercentage && bill.sgstAmount) {
-    text(`SGST (${bill.sgstPercentage}%): Rs.${bill.sgstAmount.toFixed(2)}`); nl();
+    text(`SGST (${bill.sgstPercentage}%): Rs.${r0(bill.sgstAmount)}`); nl();
   }
 
   text('--------------------------------'); nl();
   add(CMD.BOLD_ON);
   add(CMD.DOUBLE_SIZE_ON);
-  text(`TOTAL: Rs.${bill.total.toFixed(2)}`); nl();
+  text(`TOTAL: Rs.${r0(bill.total)}`); nl();
   add(CMD.DOUBLE_SIZE_OFF);
   add(CMD.BOLD_OFF);
 
@@ -243,7 +245,7 @@ export function buildReportReceipt(r: ReportReceiptData): Uint8Array {
   const nl = () => add([LF]);
   const WIDTH = 32;
   const sep = () => { text('-'.repeat(WIDTH)); nl(); };
-  const money = (n: number) => 'Rs.' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const money = (n: number) => 'Rs.' + Math.round(n).toLocaleString('en-IN');
   // Full-width label→value row: label left, value right, never overflowing.
   const lv = (label: string, value: string) => {
     const room = Math.max(0, WIDTH - value.length - 1);

@@ -109,7 +109,9 @@ export function BillingDialog({
   const netSubtotal = Math.max(subtotalAmount - discountAmount, 0);
   const cgstAmount = (netSubtotal * restaurantCgstPercentage) / 100;
   const sgstAmount = (netSubtotal * restaurantSgstPercentage) / 100;
-  const grandTotal = netSubtotal + cgstAmount + sgstAmount;
+  // Bills are settled in whole rupees — round the payable so there is never a
+  // fractional amount charged, stored, or printed.
+  const grandTotal = Math.round(netSubtotal + cgstAmount + sgstAmount);
 
   // When the dialog opens for an order, seed the discount from its SAVED value
   // (as a flat amount) so reprinting/viewing a discounted bill from history
@@ -442,10 +444,11 @@ export function BillingDialog({
     setProcessingPayment(true);
     try {
       await onPaymentComplete(paymentMethod, {
-        subtotal: subtotalAmount,
-        discountAmount,
-        cgstAmount,
-        sgstAmount,
+        // Store whole-rupee amounts so history/reports also stay fraction-free.
+        subtotal: Math.round(subtotalAmount),
+        discountAmount: Math.round(discountAmount),
+        cgstAmount: Math.round(cgstAmount),
+        sgstAmount: Math.round(sgstAmount),
         finalAmount: grandTotal,
       });
       // Reset customer + discount details
@@ -553,13 +556,13 @@ export function BillingDialog({
                     <span>
                       {groupedItem.name} ×{groupedItem.quantity}
                     </span>
-                    <span>₹{groupedItem.total.toFixed(2)}</span>
+                    <span>₹{Math.round(groupedItem.total)}</span>
                   </div>
                 ))}
                 <div className="border-t pt-2 mt-2 space-y-1">
                   <div className="flex justify-between text-sm">
                     <span>Subtotal</span>
-                    <span>₹{subtotalAmount.toFixed(2)}</span>
+                    <span>₹{Math.round(subtotalAmount)}</span>
                   </div>
 
                   {/* Discount control: percentage or flat amount */}
@@ -600,7 +603,7 @@ export function BillingDialog({
                       <span>
                         Discount{discountType === 'percent' && parseFloat(discountInput) > 0 ? ` (${parseFloat(discountInput)}%)` : ''}
                       </span>
-                      <span>-₹{discountAmount.toFixed(2)}</span>
+                      <span>-₹{Math.round(discountAmount)}</span>
                     </div>
                   )}
 
@@ -608,17 +611,17 @@ export function BillingDialog({
                     <>
                       <div className="flex justify-between text-sm text-muted-foreground">
                         <span>CGST ({restaurantCgstPercentage}%)</span>
-                        <span>₹{cgstAmount.toFixed(2)}</span>
+                        <span>₹{Math.round(cgstAmount)}</span>
                       </div>
                       <div className="flex justify-between text-sm text-muted-foreground">
                         <span>SGST ({restaurantSgstPercentage}%)</span>
-                        <span>₹{sgstAmount.toFixed(2)}</span>
+                        <span>₹{Math.round(sgstAmount)}</span>
                       </div>
                     </>
                   )}
                   <div className="flex justify-between font-bold text-lg pt-2 border-t">
                     <span>Grand Total</span>
-                    <span>₹{grandTotal.toFixed(2)}</span>
+                    <span>₹{Math.round(grandTotal)}</span>
                   </div>
                 </div>
               </div>

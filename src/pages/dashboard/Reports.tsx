@@ -369,21 +369,21 @@ function ReportPrintDialogInner({
           `Period: ${dateRangeLabel}`,
           `Date: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, '',
           '--- REVENUE SUMMARY ---', '',
-          `Subtotal (excl. GST): ₹${stats.totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+          `Subtotal (excl. GST): ₹${stats.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`,
           `Completed Orders:  ${stats.completedOrders}`,
           `Avg Order Value:   ₹${Math.round(stats.avgOrderValue).toLocaleString()}`,
-          ...(stats.cgstTotal > 0 ? [`CGST (${cgstPct}%):        ₹${stats.cgstTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`] : []),
-          ...(stats.sgstTotal > 0 ? [`SGST (${sgstPct}%):        ₹${stats.sgstTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`] : []),
+          ...(stats.cgstTotal > 0 ? [`CGST (${cgstPct}%):        ₹${stats.cgstTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`] : []),
+          ...(stats.sgstTotal > 0 ? [`SGST (${sgstPct}%):        ₹${stats.sgstTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`] : []),
           ...(stats.cgstTotal > 0 || stats.sgstTotal > 0 ? [
             '----------------------------------------',
-            `Grand Total (incl. GST): ₹${stats.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+            `Grand Total (incl. GST): ₹${stats.grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`,
           ] : []),
           '',
           '--- PAYMENT BREAKDOWN ---', '',
           `Cash:    ₹${stats.cashRevenue.toLocaleString()}`,
           `Online:  ₹${stats.onlineRevenue.toLocaleString()}`, '',
           '--- ITEM SALES ---', '',
-          ...allSoldItems.map((item, idx) => `${idx + 1}. ${item.name} x${item.quantity}  Rs.${item.revenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`),
+          ...allSoldItems.map((item, idx) => `${idx + 1}. ${item.name} x${item.quantity}  Rs.${item.revenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`),
           '', '========================================', '', '', '',
         ];
         const printWindow = window.open('', '_blank', 'width=300,height=600');
@@ -429,17 +429,17 @@ function ReportPrintDialogInner({
           <p className="text-muted-foreground">Date: {format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
           <Separator className="my-2" />
           <p className="font-semibold">REVENUE SUMMARY</p>
-          <div className="flex justify-between"><span>Subtotal (excl. GST)</span><span>₹{stats.totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+          <div className="flex justify-between"><span>Subtotal (excl. GST)</span><span>₹{stats.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
           <div className="flex justify-between"><span>Completed Orders</span><span>{stats.completedOrders}</span></div>
           <div className="flex justify-between"><span>Avg Order Value</span><span>₹{Math.round(stats.avgOrderValue).toLocaleString()}</span></div>
           {stats.cgstTotal > 0 && (
-            <div className="flex justify-between text-muted-foreground"><span>CGST ({currentRestaurant?.cgst_percentage}%)</span><span>₹{stats.cgstTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+            <div className="flex justify-between text-muted-foreground"><span>CGST ({currentRestaurant?.cgst_percentage}%)</span><span>₹{stats.cgstTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
           )}
           {stats.sgstTotal > 0 && (
-            <div className="flex justify-between text-muted-foreground"><span>SGST ({currentRestaurant?.sgst_percentage}%)</span><span>₹{stats.sgstTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+            <div className="flex justify-between text-muted-foreground"><span>SGST ({currentRestaurant?.sgst_percentage}%)</span><span>₹{stats.sgstTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
           )}
           {(stats.cgstTotal > 0 || stats.sgstTotal > 0) && (
-            <div className="flex justify-between font-semibold border-t pt-1 mt-1"><span>Grand Total (incl. GST)</span><span>₹{stats.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+            <div className="flex justify-between font-semibold border-t pt-1 mt-1"><span>Grand Total (incl. GST)</span><span>₹{stats.grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
           )}
           <Separator className="my-2" />
           <p className="font-semibold">PAYMENT BREAKDOWN</p>
@@ -452,7 +452,7 @@ function ReportPrintDialogInner({
               {allSoldItems.map((item, idx) => (
                 <div key={item.name} className="flex justify-between">
                   <span>{idx + 1}. {item.name} ×{item.quantity}</span>
-                  <span>₹{item.revenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span>₹{item.revenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                 </div>
               ))}
             </>
@@ -1180,7 +1180,7 @@ export default function Reports() {
         order.table?.table_number || 'N/A',
         order.order_items.map(i => `${i.menu_item?.name || 'Unknown'} x${i.quantity}`).join('; '),
         STATUS_CONFIG[order.status].label,
-        Number(order.total_amount).toFixed(2)
+        String(Math.round(Number(order.total_amount)))
       ]);
 
       const csvContent = [
@@ -1414,14 +1414,14 @@ export default function Reports() {
           '           REVENUE SUMMARY              ',
           '----------------------------------------',
           '',
-          `Subtotal (excl. GST): ₹${stats.totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+          `Subtotal (excl. GST): ₹${stats.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`,
           `Completed Orders:  ${stats.completedOrders}`,
           `Average Order:     ₹${Math.round(stats.avgOrderValue).toLocaleString()}`,
-          ...(stats.cgstTotal > 0 ? [`CGST (${cgstPct}%):   ₹${stats.cgstTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`] : []),
-          ...(stats.sgstTotal > 0 ? [`SGST (${sgstPct}%):   ₹${stats.sgstTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`] : []),
+          ...(stats.cgstTotal > 0 ? [`CGST (${cgstPct}%):   ₹${stats.cgstTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`] : []),
+          ...(stats.sgstTotal > 0 ? [`SGST (${sgstPct}%):   ₹${stats.sgstTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`] : []),
           ...(stats.cgstTotal > 0 || stats.sgstTotal > 0 ? [
             '----------------------------------------',
-            `Grand Total (incl. GST): ₹${stats.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+            `Grand Total (incl. GST): ₹${stats.grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`,
           ] : []),
           '',
           '----------------------------------------',
@@ -1623,7 +1623,7 @@ export default function Reports() {
                       <p className="text-2xl font-bold text-foreground">₹{stats.totalRevenue.toLocaleString()}</p>
                       {(stats.cgstTotal > 0 || stats.sgstTotal > 0) && (
                         <p className="text-xs text-primary font-semibold mt-0.5">
-                          Grand Total: ₹{stats.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          Grand Total: ₹{stats.grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                         </p>
                       )}
                     </div>
@@ -1688,23 +1688,23 @@ export default function Reports() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div className="p-3 rounded-lg bg-muted/50 border border-border">
                       <p className="text-xs text-muted-foreground mb-1">Subtotal (excl. GST)</p>
-                      <p className="text-lg font-bold text-foreground">₹{stats.totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                      <p className="text-lg font-bold text-foreground">₹{stats.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
                     </div>
                     {stats.cgstTotal > 0 && (
                       <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
                         <p className="text-xs text-muted-foreground mb-1">CGST ({currentRestaurant?.cgst_percentage}%)</p>
-                        <p className="text-lg font-bold text-foreground">₹{stats.cgstTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                        <p className="text-lg font-bold text-foreground">₹{stats.cgstTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
                       </div>
                     )}
                     {stats.sgstTotal > 0 && (
                       <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
                         <p className="text-xs text-muted-foreground mb-1">SGST ({currentRestaurant?.sgst_percentage}%)</p>
-                        <p className="text-lg font-bold text-foreground">₹{stats.sgstTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                        <p className="text-lg font-bold text-foreground">₹{stats.sgstTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
                       </div>
                     )}
                     <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
                       <p className="text-xs text-muted-foreground mb-1">Grand Total (incl. GST)</p>
-                      <p className="text-lg font-bold text-primary">₹{stats.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                      <p className="text-lg font-bold text-primary">₹{stats.grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -2048,7 +2048,7 @@ export default function Reports() {
                             </div>
                             <div className="flex items-center gap-3">
                               <p className="text-lg font-bold text-primary">
-                                ₹{orderGrandTotal(order).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                ₹{orderGrandTotal(order).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                               </p>
                               <Button
                                 variant="ghost"

@@ -292,26 +292,28 @@ class USBPrinterService {
     
     // Add subtotal
     add(CMD.ALIGN_RIGHT);
+    // Bills carry no paise — every amount is rounded to whole rupees.
+    const r0 = (n: number) => String(Math.round(n));
     const subtotal = bill.subtotal || bill.total;
-    text(`Subtotal: Rs.${subtotal.toFixed(2)}`); nl();
+    text(`Subtotal: Rs.${r0(subtotal)}`); nl();
 
     // Discount (if any)
     if (bill.discountAmount && bill.discountAmount > 0) {
-      text(`Discount: -Rs.${bill.discountAmount.toFixed(2)}`); nl();
+      text(`Discount: -Rs.${r0(bill.discountAmount)}`); nl();
     }
 
     // Add GST details if available
     if (bill.cgstPercentage && bill.cgstAmount) {
-      text(`CGST (${bill.cgstPercentage}%): Rs.${bill.cgstAmount.toFixed(2)}`); nl();
+      text(`CGST (${bill.cgstPercentage}%): Rs.${r0(bill.cgstAmount)}`); nl();
     }
     if (bill.sgstPercentage && bill.sgstAmount) {
-      text(`SGST (${bill.sgstPercentage}%): Rs.${bill.sgstAmount.toFixed(2)}`); nl();
+      text(`SGST (${bill.sgstPercentage}%): Rs.${r0(bill.sgstAmount)}`); nl();
     }
 
     text('--------------------------------'); nl();
     add(CMD.BOLD_ON);
     add(CMD.DOUBLE_SIZE_ON);
-    text(`TOTAL: Rs.${bill.total.toFixed(2)}`); nl();
+    text(`TOTAL: Rs.${r0(bill.total)}`); nl();
     add(CMD.DOUBLE_SIZE_OFF);
     add(CMD.BOLD_OFF);
 
